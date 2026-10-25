@@ -206,3 +206,8 @@ if (!auth.configured) {
   auth.currentUser().then(handleUser);
 }
 setInterval(renderWeek, 60_000); // keeps the red "now" line moving
+
+// Register the (cache-free) service worker so the app can be installed. Live site only.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
