@@ -94,3 +94,18 @@ dialog::backdrop{background:rgba(16,24,36,.5)}
 .actions .danger{margin-right:auto;color:#c92a2a;border-color:#f1c0c0}
 .hint{margin:0;font-size:11px;color:var(--mute)}
 .err{margin:0;font-size:11px;color:#c92a2a}
+
+/* ---- Step 3: login screen ---- */
+[hidden]{display:none!important}
+body:not(.authed) .side,body:not(.authed) .main{display:none}
+#authScreen{position:fixed;inset:0;z-index:50;background:var(--bg2);display:grid;place-items:center;padding:16px}
+body.authed #authScreen{display:none}
+.authbox{background:#fff;border:1px solid var(--line);border-radius:8px;padding:28px;width:min(380px,100%);display:grid;gap:12px}
+.authbox h1{font-size:18px;margin:0}
+.authbox label{display:grid;gap:4px;font-size:11px;color:var(--mute)}
+.authbox input{font:inherit;font-size:13px;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:5px}
+.authbox input:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.authbox .add{padding:9px;font-size:13px}
+.linkbtn{border:0;background:none;color:var(--blue);padding:0;text-decoration:underline;font:inherit}
+.logout{border:0;background:none;color:var(--mute);font-size:12px}
+.logout:hover{color:#c92a2a}

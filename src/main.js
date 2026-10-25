@@ -1,8 +1,9 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, recentOccurrences, getTimeline, stats } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, recentOccurrences, getTimeline, stats, loadAll, clearAll, getProfile } from "./store.js";
+import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
-const START_H = 8, END_H = 21, HOUR_PX = 64, OPEN = 11, CLOSE = 19;
+const START_H = 0, END_H = 24, HOUR_PX = 64, OPEN = 11, CLOSE = 19;
 
 // ---------- small helpers ----------
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -73,27 +74,27 @@ function openDialog({ id, date, start } = {}) {
   const v = {
     id: s?.id ?? "", title: s?.title ?? "", student: s?.student ?? "",
     date: s?.date ?? date ?? ymd(new Date()), start: s?.start ?? startH,
-    end: s?.end ?? hourStr(Math.min(21, parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
+    end: s?.end ?? (parseInt(startH, 10) >= 23 ? "23:59" : hourStr(parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
   };
   for (const [k, val] of Object.entries(v)) form.elements[k].value = val;
   dlg.showModal();
   form.elements.title.focus();
 }
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(form));
   f.title = f.title.trim(); f.student = f.student.trim();
   if (f.end <= f.start) { $("dlgError").textContent = "End time must be after the start time."; return; }
   if (!f.id) delete f.id;
-  saveSession(f);
+  try { await saveSession(f); } catch (err) { $("dlgError").textContent = err.message; return; }
   dlg.close();
   renderAll();
 });
 $("dlgCancel").onclick = () => dlg.close();
-$("dlgDelete").onclick = () => {
+$("dlgDelete").onclick = async () => {
   if (!confirm("Delete this session and all of its repeats?")) return;
-  deleteSession(form.elements.id.value);
+  try { await deleteSession(form.elements.id.value); } catch (err) { $("dlgError").textContent = err.message; return; }
   dlg.close();
   renderAll();
 };
@@ -119,10 +120,10 @@ function renderDash() {
   $("sStudents").textContent = st.students;
 }
 
-$("att").addEventListener("click", (e) => {
+$("att").addEventListener("click", async (e) => {
   const b = e.target.closest(".mark");
   if (!b || b.disabled) return;
-  markAttendance(b.dataset.id, b.dataset.occ);
+  try { await markAttendance(b.dataset.id, b.dataset.occ); } catch (err) { return alert(err.message); }
   renderAll();
 });
 
@@ -139,7 +140,65 @@ $("goHome").onclick = () => show("home");
 
 function renderAll() { renderWeek(); renderDash(); }
 
-renderAll();
-show(location.hash === "#home" ? "home" : "cal");
-document.querySelector(".week").scrollTop = (OPEN - START_H - 0.5) * HOUR_PX;
+// ---------- log in / sign up ----------
+let mode = "login";
+function setMode(m) {
+  mode = m;
+  const signup = m === "signup";
+  $("authTitle").textContent = signup ? "Create your account" : "Log in";
+  $("authSubmit").textContent = signup ? "Create account" : "Log in";
+  $("authNameWrap").hidden = !signup;
+  $("authToggleText").textContent = signup ? "Already have an account?" : "New here?";
+  $("authToggle").textContent = signup ? "Log in" : "Create an account";
+  $("authPassword").autocomplete = signup ? "new-password" : "current-password";
+}
+$("authToggle").onclick = () => { $("authMsg").textContent = ""; setMode(mode === "login" ? "signup" : "login"); };
+
+$("authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("authMsg");
+  msg.textContent = ""; msg.className = "err";
+  $("authSubmit").disabled = true;
+  try {
+    const email = $("authEmail").value.trim(), password = $("authPassword").value;
+    if (mode === "login") await auth.signIn(email, password);
+    else if (!(await auth.signUp(email, password, $("authName").value.trim()))) {
+      setMode("login");
+      msg.className = "hint";
+      msg.textContent = "Check your email to confirm your account, then log in.";
+    }
+  } catch (err) { msg.textContent = err.message; }
+  finally { $("authSubmit").disabled = false; }
+});
+$("logoutBtn").onclick = () => auth.signOut();
+
+// Runs whenever someone logs in or out
+let currentId = null;
+async function handleUser(user) {
+  const id = user?.id ?? null;
+  if (id === currentId) return; // ignore repeat events such as token refreshes
+  currentId = id;
+  document.body.classList.toggle("authed", !!user);
+  if (!user) { clearAll(); $("authPassword").value = ""; return; }
+  try {
+    const [profile] = await Promise.all([getProfile(user.id), loadAll()]);
+    const name = profile?.full_name || user.email.split("@")[0];
+    $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
+    $("whoEmail").textContent = user.email;
+    renderAll();
+    show(location.hash === "#home" ? "home" : "cal");
+    document.querySelector(".week").scrollTop = (OPEN - START_H - 0.5) * HOUR_PX;
+  } catch (err) {
+    alert(`Could not load your data: ${err.message}`);
+  }
+}
+
+if (!auth.configured) {
+  $("authForm").hidden = true;
+  $("authSetup").hidden = false;
+} else {
+  setMode("login");
+  auth.onAuthChange(handleUser);
+  auth.currentUser().then(handleUser);
+}
 setInterval(renderWeek, 60_000); // keeps the red "now" line moving

@@ -17,12 +17,13 @@
 <div class="main">
   <header class="top">
     <span>Search</span>
-    <div class="who"><b>Your Name</b><span>Your Business</span></div>
+    <div class="who"><b id="whoName">Your Name</b><span id="whoEmail"></span></div>
+    <button id="logoutBtn" class="logout">Log out</button>
   </header>
 
   <section id="calView" class="view on">
     <div class="bar">
-      <div class="sel">Your Name</div>
+      <div class="sel" id="barName">Your Name</div>
       <div class="sel">Select location</div>
       <div class="nav">
         <button id="prev" aria-label="Previous week">&lsaquo;</button>
@@ -39,7 +40,7 @@
   <section id="homeView" class="view">
     <div class="dash">
       <div class="dash-l">
-        <h1>Hello, Your Name!</h1>
+        <h1>Hello, <span id="helloName">there</span>!</h1>
         <h2 style="color:var(--mute);font-weight:500">Overview</h2>
         <div class="stats">
           <div class="stat">Classes in schedule<b id="sClasses">0</b></div>
@@ -64,8 +65,8 @@
     <label>Student <input name="student" required maxlength="80"></label>
     <label>Date <input name="date" type="date" required></label>
     <div class="two">
-      <label>Start <input name="start" type="time" min="08:00" max="21:00" required></label>
-      <label>End <input name="end" type="time" min="08:00" max="21:00" required></label>
+      <label>Start <input name="start" type="time" required></label>
+      <label>End <input name="end" type="time" required></label>
     </div>
     <label>Repeats
       <select name="repeat"><option value="none">Does not repeat</option><option value="weekly">Every week</option></select>
@@ -79,6 +80,22 @@
     </div>
   </form>
 </dialog>
+
+<div id="authScreen">
+  <form id="authForm" class="authbox">
+    <h1 id="authTitle">Log in</h1>
+    <label id="authNameWrap" hidden>Your name <input id="authName" maxlength="80" autocomplete="name"></label>
+    <label>Email <input id="authEmail" type="email" required autocomplete="email"></label>
+    <label>Password <input id="authPassword" type="password" required minlength="8" autocomplete="current-password"></label>
+    <p id="authMsg" class="err" role="alert"></p>
+    <button id="authSubmit" type="submit" class="add">Log in</button>
+    <p class="hint"><span id="authToggleText">New here?</span> <button id="authToggle" type="button" class="linkbtn">Create an account</button></p>
+  </form>
+  <div id="authSetup" class="authbox" hidden>
+    <h1>One more setup step</h1>
+    <p class="hint">Copy <b>.env.example</b> to <b>.env</b>, paste in your Supabase URL and key, then stop and restart <b>npm run dev</b>.</p>
+  </div>
+</div>
 
 <script type="module" src="/src/main.js"></script>
 </body>
