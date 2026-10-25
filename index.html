@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TutorDesk</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<aside class="side" aria-label="Main navigation">
+  <div class="logo">T</div>
+  <button id="goHome" title="Dashboard" aria-label="Dashboard">&#8962;</button>
+  <button id="goCal" class="on" title="Calendar" aria-label="Calendar">&#9638;</button>
+</aside>
+
+<div class="main">
+  <header class="top">
+    <span>Search</span>
+    <div class="who"><b>Your Name</b><span>Your Business</span></div>
+  </header>
+
+  <section id="calView" class="view on">
+    <div class="bar">
+      <div class="sel">Your Name</div>
+      <div class="sel">Select location</div>
+      <div class="nav">
+        <button id="prev" aria-label="Previous week">&lsaquo;</button>
+        <button id="today">Today</button>
+        <button id="range" tabindex="-1" style="cursor:default"></button>
+        <button id="next" aria-label="Next week">&rsaquo;</button>
+      </div>
+      <div class="sel">Week</div>
+      <button id="addBtn" class="add">Add new</button>
+    </div>
+    <div class="week"><div id="grid"></div></div>
+  </section>
+
+  <section id="homeView" class="view">
+    <div class="dash">
+      <div class="dash-l">
+        <h1>Hello, Your Name!</h1>
+        <h2 style="color:var(--mute);font-weight:500">Overview</h2>
+        <div class="stats">
+          <div class="stat">Classes in schedule<b id="sClasses">0</b></div>
+          <div class="stat">Students enrolled<b id="sStudents">0</b></div>
+          <div class="stat">Invoiced revenue (GBP)<b>0</b></div>
+        </div>
+        <div class="panels">
+          <div class="card"><h2>Attendance</h2><div id="att"></div></div>
+          <div class="card"><h2>Online Bookings</h2><p class="empty">No bookings yet.</p></div>
+        </div>
+      </div>
+      <aside class="dash-r"><h2>Timeline</h2><div id="tl"></div></aside>
+    </div>
+  </section>
+</div>
+
+<dialog id="sessionDialog" aria-labelledby="dlgTitle">
+  <form id="sessionForm">
+    <h2 id="dlgTitle">Add session</h2>
+    <input type="hidden" name="id">
+    <label>Title <input name="title" required maxlength="80"></label>
+    <label>Student <input name="student" required maxlength="80"></label>
+    <label>Date <input name="date" type="date" required></label>
+    <div class="two">
+      <label>Start <input name="start" type="time" min="08:00" max="21:00" required></label>
+      <label>End <input name="end" type="time" min="08:00" max="21:00" required></label>
+    </div>
+    <label>Repeats
+      <select name="repeat"><option value="none">Does not repeat</option><option value="weekly">Every week</option></select>
+    </label>
+    <p id="dlgHint" class="hint" hidden>Changes apply to every repeat of this session.</p>
+    <p id="dlgError" class="err" role="alert"></p>
+    <div class="actions">
+      <button type="button" id="dlgDelete" class="danger" hidden>Delete</button>
+      <button type="button" id="dlgCancel">Cancel</button>
+      <button type="submit" class="add">Save session</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
