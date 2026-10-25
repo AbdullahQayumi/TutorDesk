@@ -91,3 +91,13 @@ export const stats = () => ({
   classes: sessions.length,
   students: new Set(sessions.map((s) => s.student.trim().toLowerCase())).size,
 });
+
+// Undo a mistaken "Mark attendance"
+export async function unmarkAttendance(id, occurrence) {
+  const s = getSession(id);
+  if (!s || !s.marked.includes(occurrence)) return;
+  const { error } = await supabase.from("attendance").delete().eq("session_id", id).eq("occurrence", occurrence);
+  fail(error);
+  s.marked = s.marked.filter((o) => o !== occurrence);
+  timeline = timeline.filter((t) => !(t.sessionId === id && t.occurrence === occurrence));
+}

@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, recentOccurrences, getTimeline, stats, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -107,7 +107,9 @@ function renderDash() {
   $("att").innerHTML = rows.length ? rows.map((s) => `
     <div class="row">
       <div>${esc(s.title)}<br><span>${esc(s.student)} · ${fmtDay(parseYmd(s.occurrence))} · ${fmtT(s.start)} - ${fmtT(s.end)}</span></div>
-      <button class="mark ${s.marked ? "done" : ""}" data-id="${s.id}" data-occ="${s.occurrence}" ${s.marked ? "disabled" : ""}>${s.marked ? "Marked" : "Mark attendance"}</button>
+      ${s.marked
+        ? `<span class="act"><span class="mark done">Marked</span><button class="undo" data-act="unmark" data-id="${s.id}" data-occ="${s.occurrence}">Unmark</button></span>`
+        : `<button class="mark" data-act="mark" data-id="${s.id}" data-occ="${s.occurrence}">Mark attendance</button>`}
     </div>`).join("") : '<p class="empty">No past sessions yet. Add one from the calendar.</p>';
 
   const tl = getTimeline();
@@ -121,9 +123,11 @@ function renderDash() {
 }
 
 $("att").addEventListener("click", async (e) => {
-  const b = e.target.closest(".mark");
+  const b = e.target.closest("[data-act]");
   if (!b || b.disabled) return;
-  try { await markAttendance(b.dataset.id, b.dataset.occ); } catch (err) { return alert(err.message); }
+  const change = b.dataset.act === "unmark" ? unmarkAttendance : markAttendance;
+  b.disabled = true; // stops double-clicks
+  try { await change(b.dataset.id, b.dataset.occ); } catch (err) { b.disabled = false; return alert(err.message); }
   renderAll();
 });
 

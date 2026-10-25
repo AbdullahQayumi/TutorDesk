@@ -109,3 +109,8 @@ body.authed #authScreen{display:none}
 .linkbtn{border:0;background:none;color:var(--blue);padding:0;text-decoration:underline;font:inherit}
 .logout{border:0;background:none;color:var(--mute);font-size:12px}
 .logout:hover{color:#c92a2a}
+
+/* ---- Unmark attendance ---- */
+.act{display:flex;align-items:center;gap:8px}
+.undo{border:0;background:none;color:var(--mute);font-size:11px;text-decoration:underline;padding:0}
+.undo:hover{color:#c92a2a}
