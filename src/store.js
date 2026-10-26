@@ -9,20 +9,24 @@ export const parseYmd = (s) => { const [y, m, d] = s.split("-").map(Number); ret
 
 let sessions = []; // { id, title, student, date, start, end, repeat, marked: ["YYYY-MM-DD", ...] }
 let timeline = []; // newest first
+let students = []; // { id, name, email, phone, status, created_at }
 
 const fail = (error) => { if (error) throw new Error(error.message); };
 // Database column names <-> app field names (Postgres returns time as "18:00:00")
-const fromRow = (r) => ({ id: r.id, title: r.title, student: r.student, date: r.session_date,
+const fromRow = (r) => ({ id: r.id, title: r.title, studentId: r.student_id ?? null,
+  student: students.find((x) => x.id === r.student_id)?.name ?? r.student, date: r.session_date,
   start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5), repeat: r.recurrence, marked: [] });
-const toRow = (s) => ({ title: s.title, student: s.student, session_date: s.date,
+const toRow = (s) => ({ title: s.title, student: s.student, student_id: s.studentId ?? null, session_date: s.date,
   start_time: s.start, end_time: s.end, recurrence: s.repeat });
 
 export async function loadAll() {
-  const [a, b] = await Promise.all([
+  const [a, b, c] = await Promise.all([
     supabase.from("sessions").select("*"),
     supabase.from("attendance").select("session_id, occurrence, marked_at").order("marked_at", { ascending: false }),
+    supabase.from("students").select("*"),
   ]);
-  fail(a.error); fail(b.error);
+  fail(a.error); fail(b.error); fail(c.error);
+  students = c.data;
   sessions = a.data.map(fromRow);
   const byId = new Map(sessions.map((s) => [s.id, s]));
   timeline = [];
@@ -33,7 +37,7 @@ export async function loadAll() {
     timeline.push({ sessionId: s.id, title: s.title, occurrence: m.occurrence, at: new Date(m.marked_at).getTime() });
   }
 }
-export function clearAll() { sessions = []; timeline = []; }
+export function clearAll() { sessions = []; timeline = []; students = []; }
 
 export async function getProfile(userId) {
   const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
@@ -89,7 +93,7 @@ export function recentOccurrences(limit) {
 export const getTimeline = () => timeline.slice(0, 30);
 export const stats = () => ({
   classes: sessions.length,
-  students: new Set(sessions.map((s) => s.student.trim().toLowerCase())).size,
+  students: students.filter((s) => s.status === "active").length,
 });
 
 // Undo a mistaken "Mark attendance"
@@ -114,4 +118,30 @@ export function monthStats(year, month) {
     }
   }
   return { classes, students: students.size, byTitle };
+}
+
+// ---------- students ----------
+export const listStudents = () => [...students].sort((a, b) => a.name.localeCompare(b.name));
+export const getStudent = (id) => students.find((s) => s.id === id);
+
+export async function saveStudent(d) {
+  const row = { name: d.name, email: d.email || null, phone: d.phone || null, status: d.status || "active" };
+  if (d.id) {
+    const { data, error } = await supabase.from("students").update(row).eq("id", d.id).select().single();
+    fail(error);
+    Object.assign(getStudent(d.id), data);
+    sessions.forEach((s) => { if (s.studentId === d.id) s.student = data.name; }); // renames show on the calendar too
+    return getStudent(d.id);
+  }
+  const { data, error } = await supabase.from("students").insert(row).select().single();
+  fail(error);
+  students.push(data);
+  return data;
+}
+
+export async function deleteStudent(id) {
+  const { error } = await supabase.from("students").delete().eq("id", id);
+  fail(error);
+  students = students.filter((s) => s.id !== id);
+  sessions.forEach((s) => { if (s.studentId === id) s.studentId = null; }); // their past sessions stay, just unlinked
 }

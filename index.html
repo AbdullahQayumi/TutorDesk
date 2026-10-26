@@ -17,8 +17,14 @@
 
 <aside class="side" aria-label="Main navigation">
   <div class="logo">T</div>
-  <button id="goHome" title="Dashboard" aria-label="Dashboard">&#8962;</button>
-  <button id="goCal" class="on" title="Calendar" aria-label="Calendar">&#9638;</button>
+  <button data-go="home" title="Dashboard" aria-label="Dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></button>
+  <button data-go="cal" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+  <button data-go="people" title="People" aria-label="People"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6M16 4.5a3.5 3.5 0 010 7M18 14c2.2.7 3.5 2.7 3.5 6"/></svg></button>
+  <button data-go="resources" title="Resources" aria-label="Resources"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></button>
+  <button data-go="gradebook" title="Gradebook" aria-label="Gradebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5zM6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg></button>
+  <button data-go="chat" title="Chat" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 01-11.5 7.2L4 20.5l1.3-4.5A8 8 0 1121 12z"/></svg></button>
+  <button data-go="reports" title="Reports" aria-label="Reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg></button>
+  <button data-go="profile" title="Profile" aria-label="Profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></button>
 </aside>
 
 <div class="main">
@@ -66,6 +72,36 @@
       <aside class="dash-r"><h2>Timeline</h2><div id="tl"></div></aside>
     </div>
   </section>
+  <section id="peopleView" class="view">
+    <nav class="subnav" aria-label="People sections">
+      <h2>People</h2>
+      <button class="on" data-sub="students">Students</button>
+      <span class="sublabel">SETUP</span>
+      <button data-sub="batches">Batches</button>
+      <button data-sub="guardians">Guardians</button>
+    </nav>
+    <div class="pane">
+      <div id="studentsPane">
+        <div class="phead">
+          <div><h1>All Students</h1><p class="hint">Create and manage student profiles.</p></div>
+          <button id="addStudentBtn" class="add">Add student</button>
+        </div>
+        <div class="stats">
+          <div class="stat">Active<b id="stActive">0</b></div>
+          <div class="stat">New (last 30 days)<b id="stNew">0</b></div>
+          <div class="stat">Total<b id="stTotal">0</b></div>
+        </div>
+        <div class="toolbar">
+          <input id="stSearch" type="search" placeholder="Search students" aria-label="Search students">
+          <select id="stFilter" class="sel" aria-label="Filter students"><option value="all">All students</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
+        </div>
+        <div id="studentTable" class="tblwrap"></div>
+      </div>
+      <div id="peopleSoon" class="soon" hidden><h1 id="peopleSoonTitle"></h1><p>Coming in a later phase.</p></div>
+    </div>
+  </section>
+
+  <section id="soonView" class="view"><div class="soon"><h1 id="soonTitle"></h1><p id="soonText"></p></div></section>
 </div>
 
 <dialog id="sessionDialog" aria-labelledby="dlgTitle">
@@ -73,7 +109,8 @@
     <h2 id="dlgTitle">Add session</h2>
     <input type="hidden" name="id">
     <label>Title <input name="title" required maxlength="80"></label>
-    <label>Student <input name="student" required maxlength="80"></label>
+    <label>Student <input name="student" list="studentList" required maxlength="80" autocomplete="off"></label>
+    <datalist id="studentList"></datalist>
     <label>Date <input name="date" type="date" required></label>
     <div class="two">
       <label>Start <input name="start" type="time" required></label>
@@ -88,6 +125,23 @@
       <button type="button" id="dlgDelete" class="danger" hidden>Delete</button>
       <button type="button" id="dlgCancel">Cancel</button>
       <button type="submit" class="add">Save session</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="studentDialog" aria-labelledby="stDlgTitle">
+  <form id="studentForm">
+    <h2 id="stDlgTitle">Add student</h2>
+    <input type="hidden" name="id">
+    <label>Name <input name="name" required maxlength="80"></label>
+    <label>Email <input name="email" type="email" maxlength="120"></label>
+    <label>Phone <input name="phone" type="tel" maxlength="30"></label>
+    <label>Status <select name="status"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+    <p id="stDlgError" class="err" role="alert"></p>
+    <div class="actions">
+      <button type="button" id="stDelete" class="danger" hidden>Delete</button>
+      <button type="button" id="stCancel">Cancel</button>
+      <button type="submit" class="add">Save student</button>
     </div>
   </form>
 </dialog>

@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -124,6 +124,7 @@ function openDialog({ id, date, start } = {}) {
   $("dlgHint").hidden = !(s && s.repeat === "weekly");
   $("dlgError").textContent = "";
   form.reset();
+  $("studentList").innerHTML = listStudents().map((x) => `<option value="${esc(x.name)}">`).join("");
   const v = {
     id: s?.id ?? "", title: s?.title ?? "", student: s?.student ?? "",
     date: s?.date ?? date ?? ymd(new Date()), start: s?.start ?? startH,
@@ -140,7 +141,12 @@ form.addEventListener("submit", async (e) => {
   f.title = f.title.trim(); f.student = f.student.trim();
   if (f.end <= f.start) { $("dlgError").textContent = "End time must be after the start time."; return; }
   if (!f.id) delete f.id;
-  try { await saveSession(f); } catch (err) { $("dlgError").textContent = err.message; return; }
+  try {
+    // Match the typed name to an existing student, or create the student on the fly.
+    const st = listStudents().find((x) => x.name.toLowerCase() === f.student.toLowerCase()) || await saveStudent({ name: f.student, status: "active" });
+    f.student = st.name; f.studentId = st.id;
+    await saveSession(f);
+  } catch (err) { $("dlgError").textContent = err.message; return; }
   dlg.close();
   renderAll();
 });
@@ -202,15 +208,79 @@ $("att").addEventListener("click", async (e) => {
 });
 
 // ---------- navigation ----------
+const SECTIONS = ["home", "cal", "people", "resources", "gradebook", "chat", "reports", "profile"];
+const REAL = { cal: "calView", home: "homeView", people: "peopleView" };
+const SOON = {
+  resources: ["Resources", "Upload and share files and courses with your students."],
+  gradebook: ["Gradebook", "Grade your students and track their progress over time."],
+  chat: ["Chat", "Message students and parents."],
+  reports: ["Reports", "Staff and student dashboards."],
+  profile: ["Profile", "Your details, working hours, leaves and timesheet."],
+};
 function show(which) {
-  $("calView").classList.toggle("on", which === "cal");
-  $("homeView").classList.toggle("on", which === "home");
-  $("goCal").classList.toggle("on", which === "cal");
-  $("goHome").classList.toggle("on", which === "home");
-  history.replaceState(null, "", which === "home" ? "#home" : "#calendar");
+  document.querySelectorAll(".view").forEach((v) => v.classList.remove("on"));
+  $(REAL[which] || "soonView").classList.add("on");
+  if (!REAL[which]) { $("soonTitle").textContent = SOON[which][0]; $("soonText").textContent = SOON[which][1] + " Coming in a later phase."; }
+  document.querySelectorAll(".side [data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === which));
+  history.replaceState(null, "", "#" + which);
+  if (which === "people") renderPeople();
 }
-$("goCal").onclick = () => show("cal");
-$("goHome").onclick = () => show("home");
+document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => show(b.dataset.go)));
+
+// ---------- people: students ----------
+let peopleTab = "students";
+const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+function renderPeople() {
+  document.querySelectorAll("#peopleView [data-sub]").forEach((b) => b.classList.toggle("on", b.dataset.sub === peopleTab));
+  const isStudents = peopleTab === "students";
+  $("studentsPane").hidden = !isStudents;
+  $("peopleSoon").hidden = isStudents;
+  if (!isStudents) { $("peopleSoonTitle").textContent = peopleTab === "batches" ? "Batches" : "Guardians"; return; }
+  const all = listStudents(), q = $("stSearch").value.trim().toLowerCase(), f = $("stFilter").value;
+  const rows = all.filter((s) => (f === "all" || s.status === f) && `${s.name} ${s.email || ""} ${s.phone || ""}`.toLowerCase().includes(q));
+  $("stActive").textContent = all.filter((s) => s.status === "active").length;
+  $("stNew").textContent = all.filter((s) => Date.now() - new Date(s.created_at) < 30 * 864e5).length;
+  $("stTotal").textContent = all.length;
+  $("studentTable").innerHTML = rows.length
+    ? `<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Email</th><th>Phone</th><th>Created</th></tr></thead><tbody>${rows.map((s) =>
+        `<tr data-id="${s.id}" tabindex="0"><td><span class="av">${esc(initials(s.name))}</span>${esc(s.name)}</td><td><span class="pill ${s.status}">${s.status === "active" ? "Active" : "Inactive"}</span></td><td>${esc(s.email || "")}</td><td>${esc(s.phone || "")}</td><td>${new Date(s.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="empty">${all.length ? "No students match your search." : "No students yet. Click Add student to create the first one."}</p>`;
+}
+document.querySelectorAll("#peopleView [data-sub]").forEach((b) => (b.onclick = () => { peopleTab = b.dataset.sub; renderPeople(); }));
+$("stSearch").oninput = renderPeople;
+$("stFilter").onchange = renderPeople;
+
+const stDlg = $("studentDialog"), stForm = $("studentForm");
+function openStudent(id) {
+  const s = id ? getStudent(id) : null;
+  $("stDlgTitle").textContent = s ? "Edit student" : "Add student";
+  $("stDelete").hidden = !s;
+  $("stDlgError").textContent = "";
+  stForm.reset();
+  const v = { id: s?.id ?? "", name: s?.name ?? "", email: s?.email ?? "", phone: s?.phone ?? "", status: s?.status ?? "active" };
+  for (const [k, val] of Object.entries(v)) stForm.elements[k].value = val;
+  stDlg.showModal();
+  stForm.elements.name.focus();
+}
+$("addStudentBtn").onclick = () => openStudent();
+const rowOpen = (e) => { const r = e.target.closest("tr[data-id]"); if (r) openStudent(r.dataset.id); };
+$("studentTable").addEventListener("click", rowOpen);
+$("studentTable").addEventListener("keydown", (e) => { if (e.key === "Enter") rowOpen(e); });
+stForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(stForm));
+  f.name = f.name.trim();
+  if (!f.id) delete f.id;
+  try { await saveStudent(f); } catch (err) { $("stDlgError").textContent = err.message; return; }
+  stDlg.close(); renderPeople(); renderAll();
+});
+$("stCancel").onclick = () => stDlg.close();
+$("stDelete").onclick = async () => {
+  if (!confirm("Delete this student? Their past sessions stay on your calendar.")) return;
+  try { await deleteStudent(stForm.elements.id.value); } catch (err) { $("stDlgError").textContent = err.message; return; }
+  stDlg.close(); renderPeople(); renderAll();
+};
+stDlg.addEventListener("click", (e) => { if (e.target === stDlg) stDlg.close(); });
 
 function renderAll() { renderWeek(); renderDash(); }
 
@@ -260,7 +330,7 @@ async function handleUser(user) {
     $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
     $("whoEmail").textContent = user.email;
     renderAll();
-    show(location.hash === "#home" ? "home" : "cal");
+    show(SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "cal");
     document.querySelector(".week").scrollTop = (OPEN - START_H - 0.5) * HOUR_PX;
   } catch (err) {
     alert(`Could not load your data: ${err.message}`);
