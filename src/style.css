@@ -227,3 +227,40 @@ select.sel{font:inherit;font-size:12px;color:var(--ink)}
 #teamBody .toolbar{margin:10px 0}
 #staffSel{max-width:170px}
 @media (max-width:760px){ .bar{flex-wrap:wrap} #orgSel{max-width:120px} }
+
+/* ---- Profile page ---- */
+.profile{display:grid;grid-template-columns:300px minmax(0,1fr);gap:32px;align-items:start}
+.bigav{width:84px;height:84px;border-radius:50%;background:#ece9fb;color:#6a4fc8;display:grid;place-items:center;font-size:28px;font-weight:600;margin-bottom:12px}
+.sideblock{border-top:1px solid var(--line);padding:16px 0;margin-top:16px;font-size:12px;color:var(--mute)}
+.switch{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.switch input{margin-top:2px}
+.switch b{display:block;font-size:13px;color:var(--ink)}
+.row2{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;color:var(--ink)}
+.dl{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 10px;margin:0}
+.dl dt{color:var(--mute)} .dl dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:20px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 0;color:var(--mute);font-size:13px;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--blue);border-bottom-color:var(--blue)}
+.cols2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.minical{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11px}
+.minical .h{font-weight:600;color:var(--mute);padding:6px 0}
+.minical .d{position:relative;padding:7px 0;border-radius:4px;cursor:pointer}
+.minical .d:hover{background:var(--bg2)}
+.minical .d.out{color:var(--mute)}
+.minical .d.sel{background:var(--blue);color:#fff}
+.minical .d.dot::after{content:"";position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--blue)}
+.minical .d.sel.dot::after{background:#fff}
+.pill2{display:inline-block;margin:0 6px 0 0;padding:0 8px;border:1px solid var(--line);border-radius:10px;font-size:11px;color:var(--mute)}
+.stat .pill2{margin-top:6px}
+.tbl input[type=time],.tbl input[type=date]{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:5px}
+.leave{position:absolute;top:6px;left:6px;z-index:1;background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--mute);pointer-events:none}
+#profileForm{padding:20px;display:grid;gap:12px}
+#profileForm label{display:grid;gap:4px;font-size:11px;color:var(--mute)}
+#profileForm input{font:inherit;font-size:13px;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:#fff}
+#profileForm input:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+@media (max-width:760px){
+  .profile,.cols2{grid-template-columns:minmax(0,1fr);gap:16px}
+  #profileForm input{font-size:16px}
+}
+[data-pmonth]{font-size:20px;line-height:1;text-decoration:none;padding:0 8px}
+.sect + .cols2{margin-top:12px}

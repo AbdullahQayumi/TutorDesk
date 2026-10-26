@@ -108,6 +108,28 @@
     </div>
   </section>
 
+  <section id="profileView" class="view">
+    <div class="pane">
+      <div class="profile">
+        <div>
+          <div class="bigav" id="pAvatar"></div>
+          <h1 id="pName"></h1><p class="hint" id="pEmail"></p>
+          <div id="pSide"></div>
+        </div>
+        <div>
+          <div class="tabs">
+            <button data-ptab="overview" class="on">Overview</button>
+            <button data-ptab="calendar">Calendar</button>
+            <button data-ptab="hours">Working hours</button>
+            <button data-ptab="leaves">Leaves</button>
+            <button data-ptab="timesheet">Timesheet</button>
+          </div>
+          <div id="pBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="soonView" class="view"><div class="soon"><h1 id="soonTitle"></h1><p id="soonText"></p></div></section>
 </div>
 
@@ -151,6 +173,16 @@
       <button type="button" id="stCancel">Cancel</button>
       <button type="submit" class="add">Save student</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="profileDialog" aria-labelledby="pfTitle">
+  <form id="profileForm">
+    <h2 id="pfTitle">Personal information</h2>
+    <label>Name <input name="name" required maxlength="80"></label>
+    <label>Phone <input name="phone" type="tel" maxlength="30"></label>
+    <p id="pfError" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="pfCancel">Cancel</button><button type="submit" class="add">Save</button></div>
   </form>
 </dialog>
 

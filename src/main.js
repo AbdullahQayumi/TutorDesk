@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -40,6 +40,14 @@ function layout(evs) {
   return out;
 }
 
+// Shading: outside the viewed person's working hours, and the whole day when they are on leave.
+function offBlocks(d) {
+  const who = staffFilter === "all" ? getMe().id : staffFilter, h = getHours(who)[d.getDay()];
+  if (onLeave(who, ymd(d))) return '<div class="off" style="top:0;bottom:0"></div><span class="leave">On leave</span>';
+  if (!h) return '<div class="off" style="top:0;bottom:0"></div>';
+  return `<div class="off" style="top:0;height:${(toH(h[0]) - START_H) * HOUR_PX}px"></div><div class="off" style="top:${(toH(h[1]) - START_H) * HOUR_PX}px;bottom:0"></div>`;
+}
+
 function renderWeek() {
   HOUR_PX = phone.matches ? 44 : 64;
   const grid = $("grid");
@@ -65,8 +73,7 @@ function renderWeek() {
     const nowLine = ymd(d) === todayKey && nowH >= START_H && nowH <= END_H
       ? `<div class="now" style="top:${(nowH - START_H) * HOUR_PX}px"></div>` : "";
     return `<div class="col" data-date="${ymd(d)}" style="height:${colH}px">
-      <div class="off" style="top:0;height:${(OPEN - START_H) * HOUR_PX}px"></div>
-      <div class="off" style="top:${(CLOSE - START_H) * HOUR_PX}px;bottom:0"></div>${events}${nowLine}</div>`;
+      ${offBlocks(d)}${events}${nowLine}</div>`;
   }).join("");
 
   grid.innerHTML = `<div class="heads">${heads}</div><div class="body"><div class="times">${times}</div>${cols}</div>`;
@@ -134,7 +141,7 @@ function openDialog({ id, date, start } = {}) {
     end: s?.end ?? (parseInt(startH, 10) >= 23 ? "23:59" : hourStr(parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
   };
   const editable = !s || canEditSession(s);
-  form.elements.staffId.innerHTML = getMembers().map((m) => `<option value="${m.userId}">${esc(m.name)}</option>`).join("");
+  form.elements.staffId.innerHTML = getMembers().filter((m) => takesClasses(m.userId) || m.userId === s?.staffId).map((m) => `<option value="${m.userId}">${esc(m.name)}</option>`).join("");
   v.staffId = s?.staffId ?? getMe().id;
   for (const [k, val] of Object.entries(v)) form.elements[k].value = val;
   $("staffWrap").hidden = !(getOrg().type === "business" && isAdmin());
@@ -219,13 +226,12 @@ $("att").addEventListener("click", async (e) => {
 
 // ---------- navigation ----------
 const SECTIONS = ["home", "cal", "people", "resources", "gradebook", "chat", "reports", "profile"];
-const REAL = { cal: "calView", home: "homeView", people: "peopleView" };
+const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView" };
 const SOON = {
   resources: ["Resources", "Upload and share files and courses with your students."],
   gradebook: ["Gradebook", "Grade your students and track their progress over time."],
   chat: ["Chat", "Message students and parents."],
   reports: ["Reports", "Staff and student dashboards."],
-  profile: ["Profile", "Your details, working hours, leaves and timesheet."],
 };
 function show(which) {
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("on"));
@@ -234,8 +240,9 @@ function show(which) {
   document.querySelectorAll(".side [data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === which));
   history.replaceState(null, "", "#" + which);
   if (which === "people") renderPeople();
+  if (which === "profile") renderProfile();
 }
-document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => show(b.dataset.go)));
+document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => { if (b.dataset.go === "profile") profileId = null; show(b.dataset.go); }));
 
 // ---------- people: students ----------
 let peopleTab = "students";
@@ -304,7 +311,7 @@ function renderTeam() {
     return;
   }
   const editable = (m) => admin && m.role !== "owner" && m.userId !== me.id;
-  const rows = getMembers().map((m) => `<tr><td><span class="av">${esc(initials(m.name))}</span>${esc(m.name)}${m.userId === me.id ? " (you)" : ""}</td><td>${esc(m.email)}</td><td>${editable(m)
+  const rows = getMembers().map((m) => `<tr><td><span class="av">${esc(initials(m.name))}</span><button class="linkbtn" data-profile="${m.userId}">${esc(m.name)}</button>${m.userId === me.id ? " (you)" : ""}</td><td>${esc(m.email)}</td><td>${editable(m)
       ? `<select class="sel" data-role="${m.userId}"><option value="admin"${m.role === "admin" ? " selected" : ""}>Admin</option><option value="staff"${m.role === "staff" ? " selected" : ""}>Staff</option></select>`
       : `<span class="pill ${m.role === "staff" ? "inactive" : "active"}">${cap(m.role)}</span>`}</td><td>${editable(m) ? `<button class="undo" data-remove="${m.userId}">Remove</button>` : ""}</td></tr>`).join("");
   const pending = getInvites().map((i) => `<tr><td>${esc(i.email)}</td><td>${cap(i.role)}</td><td><button class="undo" data-revoke="${i.id}">Revoke</button></td></tr>`).join("");
@@ -326,7 +333,8 @@ $("teamBody").addEventListener("change", async (e) => {
   try { await setRole(sel.dataset.role, sel.value); renderTeam(); } catch (err) { teamErr(err.message); }
 });
 $("teamBody").addEventListener("click", async (e) => {
-  const rm = e.target.closest("[data-remove]"), rv = e.target.closest("[data-revoke]"), biz = e.target.closest("#toBiz");
+  const rm = e.target.closest("[data-remove]"), rv = e.target.closest("[data-revoke]"), biz = e.target.closest("#toBiz"), pv = e.target.closest("[data-profile]");
+  if (pv) return openProfile(pv.dataset.profile);
   try {
     if (rm) { if (!confirm("Remove this person? Their sessions will be reassigned to you.")) return; await removeMember(rm.dataset.remove); applyOrgUI(); renderAll(); }
     else if (rv) await revokeInvite(rv.dataset.revoke);
@@ -356,8 +364,154 @@ $("staffSel").onchange = (e) => { staffFilter = e.target.value; renderWeek(); };
 $("orgSel").onchange = async (e) => {
   try { localStorage.setItem("tutordesk.org", e.target.value); } catch { /* ignore */ }
   try { await loadAll(authUser.id, e.target.value); } catch (err) { return alert(err.message); }
-  staffFilter = "all"; applyOrgUI(); renderAll(); renderPeople();
+  staffFilter = "all"; profileId = null; applyOrgUI(); renderAll(); renderPeople();
 };
+
+// ---------- profile: overview, working hours, leaves, timesheet ----------
+let profileId = null, ptab = "overview", pMonth = new Date(), pDay = ymd(new Date());
+const nowD = new Date();
+let tsFrom = ymd(new Date(nowD.getFullYear(), nowD.getMonth(), 1)), tsTo = ymd(new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0));
+const DAYS = [["Monday", 1], ["Tuesday", 2], ["Wednesday", 3], ["Thursday", 4], ["Friday", 5], ["Saturday", 6], ["Sunday", 0]];
+const hrs = (h) => String(Math.round(h * 10) / 10);
+const fmtD = (k) => parseYmd(k).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+function openProfile(id) { profileId = id; ptab = "overview"; show("profile"); }
+
+function renderProfile() {
+  const me = getMe();
+  const m = getMembers().find((x) => x.userId === (profileId || me.id)) || getMembers().find((x) => x.userId === me.id);
+  profileId = m.userId;
+  const mine = profileId === me.id, canEdit = mine || isAdmin();
+  $("pAvatar").textContent = initials(m.name); $("pName").textContent = m.name; $("pEmail").textContent = m.email;
+  $("pSide").innerHTML = `<div class="sideblock"><label class="switch"><input type="checkbox" id="pTakes" ${takesClasses(profileId) ? "checked" : ""} ${canEdit ? "" : "disabled"}><span><b>Takes classes</b>Allow sessions to be assigned to this person.</span></label></div>
+    <div class="sideblock"><div class="row2"><b>Personal information</b>${mine ? '<button class="undo" id="pEdit">Edit</button>' : ""}</div>
+    <dl class="dl"><dt>Name</dt><dd>${esc(m.name)}</dd><dt>Email</dt><dd>${esc(m.email)}</dd><dt>Phone</dt><dd>${esc(m.phone || "Not set")}</dd><dt>Role</dt><dd>${cap(m.role)}</dd></dl></div>`;
+  document.querySelectorAll("[data-ptab]").forEach((b) => b.classList.toggle("on", b.dataset.ptab === ptab));
+  $("pBody").innerHTML = ({ overview: pOverview, calendar: pCalendar, hours: pHours, leaves: pLeaves, timesheet: pTimesheet })[ptab](canEdit, mine);
+}
+
+function pOverview() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const win = (a, b) => timesheet(profileId, ymd(addDays(today, a)), ymd(addDays(today, b)));
+  const sum = (rows) => ({ c: rows.length, st: new Set(rows.map((r) => r.student.toLowerCase())).size, h: rows.reduce((t, r) => t + r.hours, 0) });
+  const nx = sum(win(0, 6)), pv = sum(win(-7, -1));
+  const stat = (label, a, b) => `<div class="stat">${label}<b>${a}</b><span class="pill2">${b}</span>Last 7 days</div>`;
+  return `<div class="stats">${stat("Classes · next 7 days", nx.c, pv.c)}${stat("Students · next 7 days", nx.st, pv.st)}${stat("Hours booked · next 7 days", hrs(nx.h), hrs(pv.h))}</div>
+    <h2 class="sect">Upcoming classes</h2><div class="cols2"><div>${miniCal()}</div><div><h2>Schedule for ${fmtD(pDay)}</h2><div class="card">${dayList()}</div></div></div>`;
+}
+function miniCal() {
+  const y = pMonth.getFullYear(), mo = pMonth.getMonth(), first = new Date(y, mo, 1), lead = (first.getDay() + 6) % 7;
+  const weeks = Math.ceil((lead + new Date(y, mo + 1, 0).getDate()) / 7);
+  const cells = [...Array(weeks * 7)].map((_, i) => {
+    const d = addDays(first, i - lead), k = ymd(d), has = sessionsOn(d).some((x) => x.staffId === profileId);
+    return `<div class="d${d.getMonth() !== mo ? " out" : ""}${has ? " dot" : ""}${k === pDay ? " sel" : ""}" data-pday="${k}">${d.getDate()}</div>`;
+  }).join("");
+  return `<div class="row2"><b>${first.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</b><span><button class="undo" data-pmonth="-1" aria-label="Previous month">&lsaquo;</button> <button class="undo" data-pmonth="1" aria-label="Next month">&rsaquo;</button></span></div>
+    <div class="minical">${["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => `<div class="h">${d}</div>`).join("")}${cells}</div>`;
+}
+function dayList() {
+  const rows = timesheet(profileId, pDay, pDay);
+  return rows.length
+    ? rows.map((r) => `<div class="row"><div>${fmtT(r.start)} - ${fmtT(r.end)}<br><span>${esc(r.title)} · ${esc(r.student)}</span></div></div>`).join("")
+    : '<p class="empty">No sessions on this date.</p>';
+}
+function pCalendar(canEdit, mine) {
+  return `<p class="hint">See ${mine ? "your" : "their"} sessions on the main calendar.</p><p><button class="add" data-gocal>Open ${mine ? "my" : "their"} calendar</button></p>`;
+}
+function pHours(canEdit) {
+  const h = getHours(profileId), dis = canEdit ? "" : "disabled";
+  return `<p class="hint">Outside these hours the calendar is shaded. You can still add sessions outside them.</p>
+    <div class="tblwrap"><table class="tbl"><tbody>${DAYS.map(([n, d]) => `<tr style="cursor:default"><td>${n}</td><td><label class="switch"><input type="checkbox" data-open="${d}" ${h[d] ? "checked" : ""} ${dis}> Open</label></td><td><input type="time" data-from="${d}" value="${h[d]?.[0] ?? "09:00"}" ${dis} aria-label="${n} start"> – <input type="time" data-to="${d}" value="${h[d]?.[1] ?? "17:00"}" ${dis} aria-label="${n} end"></td></tr>`).join("")}</tbody></table></div>
+    ${canEdit ? '<p><button class="add" id="saveHours">Save working hours</button></p>' : ""}<p id="pErr" class="err" role="alert"></p>`;
+}
+function pLeaves(canEdit) {
+  const list = getLeaves(profileId).sort((a, b) => b.start_date.localeCompare(a.start_date));
+  const range = (l) => (l.start_date === l.end_date ? fmtD(l.start_date) : `${fmtD(l.start_date)} – ${fmtD(l.end_date)}`);
+  return (canEdit ? '<form id="leaveForm" class="toolbar"><input type="date" name="from" required aria-label="From"><input type="date" name="to" required aria-label="To"><input name="reason" placeholder="Reason (optional)" maxlength="200" aria-label="Reason"><button class="add" type="submit">Add leave</button></form>' : "")
+    + (list.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Dates</th><th>Reason</th><th></th></tr></thead><tbody>${list.map((l) => `<tr style="cursor:default"><td>${range(l)}</td><td>${esc(l.reason || "")}</td><td>${canEdit ? `<button class="undo" data-delleave="${l.id}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty" style="padding:0">No leaves recorded.</p>')
+    + '<p id="pErr" class="err" role="alert"></p>';
+}
+function pTimesheet() {
+  const rows = timesheet(profileId, tsFrom, tsTo), tot = rows.reduce((t, r) => t + r.hours, 0), done = rows.filter((r) => r.marked).reduce((t, r) => t + r.hours, 0);
+  return `<div class="toolbar"><input type="date" data-ts="from" value="${tsFrom}" aria-label="From"><input type="date" data-ts="to" value="${tsTo}" aria-label="To"><button class="add" id="csvBtn">Download CSV</button></div>
+    <div class="stats"><div class="stat">Sessions<b>${rows.length}</b></div><div class="stat">Scheduled hours<b>${hrs(tot)}</b></div><div class="stat">Hours attended<b>${hrs(done)}</b></div></div>
+    ${rows.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Class</th><th>Student</th><th>Hours</th><th>Attendance</th></tr></thead><tbody>${rows.map((r) => `<tr style="cursor:default"><td>${fmtD(r.date)}</td><td>${fmtT(r.start)} - ${fmtT(r.end)}</td><td>${esc(r.title)}</td><td>${esc(r.student)}</td><td>${hrs(r.hours)}</td><td>${r.marked ? "Marked" : "&mdash;"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty" style="padding:0">No sessions in this range.</p>'}`;
+}
+function downloadCsv() {
+  const rows = timesheet(profileId, tsFrom, tsTo);
+  // a leading ' stops spreadsheets treating text like =SUM(...) as a formula
+  const q = (v) => { v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  const csv = [["Date", "Start", "End", "Class", "Student", "Hours", "Attendance"], ...rows.map((r) => [r.date, r.start, r.end, r.title, r.student, hrs(r.hours), r.marked ? "Marked" : ""])]
+    .map((r) => r.map(q).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `timesheet-${tsFrom}-to-${tsTo}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.querySelectorAll("[data-ptab]").forEach((b) => (b.onclick = () => { ptab = b.dataset.ptab; renderProfile(); }));
+$("pBody").addEventListener("click", async (e) => {
+  const t = (sel) => e.target.closest(sel);
+  try {
+    if (t("[data-pmonth]")) pMonth = new Date(pMonth.getFullYear(), pMonth.getMonth() + Number(t("[data-pmonth]").dataset.pmonth), 1);
+    else if (t("[data-pday]")) pDay = t("[data-pday]").dataset.pday;
+    else if (t("[data-gocal]")) { staffFilter = profileId; applyOrgUI(); show("cal"); return renderWeek(); }
+    else if (t("#csvBtn")) return downloadCsv();
+    else if (t("[data-delleave]")) { await deleteLeave(t("[data-delleave]").dataset.delleave); renderWeek(); }
+    else if (t("#saveHours")) {
+      const wh = {};
+      for (const [, d] of DAYS) {
+        if (!document.querySelector(`[data-open="${d}"]`).checked) continue;
+        const a = document.querySelector(`[data-from="${d}"]`).value, z = document.querySelector(`[data-to="${d}"]`).value;
+        if (!a || !z || z <= a) throw new Error("Each open day needs a start time before its end time.");
+        wh[d] = [a, z];
+      }
+      await saveSettings(profileId, { workingHours: wh });
+      renderWeek(); renderProfile();
+      $("pErr").className = "hint"; $("pErr").textContent = "Saved.";
+      return;
+    } else return;
+    renderProfile();
+  } catch (err) { const el = $("pErr"); if (el) el.textContent = err.message; else alert(err.message); }
+});
+$("pBody").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try {
+    if (f.get("to") < f.get("from")) throw new Error("The end date can't be before the start date.");
+    await addLeave(profileId, f.get("from"), f.get("to"), f.get("reason"));
+    renderWeek(); renderProfile();
+  } catch (err) { $("pErr").textContent = err.message; }
+});
+$("pBody").addEventListener("change", (e) => {
+  const el = e.target.closest("[data-ts]");
+  if (!el || !el.value) return;
+  if (el.dataset.ts === "from") tsFrom = el.value; else tsTo = el.value;
+  renderProfile();
+});
+$("pSide").addEventListener("change", async (e) => {
+  if (e.target.id !== "pTakes") return;
+  try { await saveSettings(profileId, { takesClasses: e.target.checked }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; }
+});
+
+const pDlg = $("profileDialog"), pForm = $("profileForm");
+$("pSide").addEventListener("click", (e) => {
+  if (e.target.id !== "pEdit") return;
+  const m = getMembers().find((x) => x.userId === getMe().id);
+  pForm.elements.name.value = m.name; pForm.elements.phone.value = m.phone || "";
+  $("pfError").textContent = "";
+  pDlg.showModal(); pForm.elements.name.focus();
+});
+pForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = pForm.elements.name.value.trim();
+  try { await saveProfile({ fullName: name, phone: pForm.elements.phone.value.trim() }); } catch (err) { $("pfError").textContent = err.message; return; }
+  pDlg.close();
+  $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
+  renderProfile(); renderAll();
+});
+$("pfCancel").onclick = () => pDlg.close();
+pDlg.addEventListener("click", (e) => { if (e.target === pDlg) pDlg.close(); });
 
 function renderAll() { renderWeek(); renderDash(); }
 
@@ -408,7 +562,7 @@ async function handleUser(user) {
   if (id === currentId) return; // ignore repeat events such as token refreshes
   currentId = id;
   document.body.classList.toggle("authed", !!user);
-  if (!user) { clearAll(); $("authPassword").value = ""; return; }
+  if (!user) { clearAll(); profileId = null; $("authPassword").value = ""; return; }
   try {
     const [profile] = await Promise.all([getProfile(user.id), loadAll(user.id, savedOrg())]);
     const name = profile?.full_name || user.email.split("@")[0];

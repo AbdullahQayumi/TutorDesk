@@ -12,6 +12,7 @@ let timeline = []; // newest first
 let students = []; // { id, name, email, phone, status, created_at }
 let org = null, myRole = null, myId = null; // the workspace being viewed, and who I am in it
 let orgs = [], members = [], invites = [];
+let settings = {}, leaves = []; // settings: userId -> { workingHours, takesClasses }
 
 const fail = (error) => { if (error) throw new Error(error.message); };
 // Database column names <-> app field names (Postgres returns time as "18:00:00")
@@ -30,17 +31,21 @@ export async function loadAll(userId, preferredOrg) {
   if (!orgs.length) throw new Error("No workspace found for this account.");
   org = orgs.find((o) => o.id === preferredOrg) || orgs[0];
   myRole = org.role;
-  const [a, b, c, d, e] = await Promise.all([
+  const [a, b, c, d, e, f, g] = await Promise.all([
     supabase.from("sessions").select("*").eq("org_id", org.id),
     supabase.from("attendance").select("session_id, occurrence, marked_at").eq("org_id", org.id).order("marked_at", { ascending: false }),
     supabase.from("students").select("*").eq("org_id", org.id),
-    supabase.from("memberships").select("user_id, role, profiles(full_name, email)").eq("org_id", org.id),
+    supabase.from("memberships").select("user_id, role, profiles(full_name, email, phone)").eq("org_id", org.id),
     isAdmin() ? supabase.from("invites").select("*").eq("org_id", org.id) : { data: [], error: null },
+    supabase.from("member_settings").select("*").eq("org_id", org.id),
+    supabase.from("leaves").select("*").eq("org_id", org.id),
   ]);
-  fail(a.error); fail(b.error); fail(c.error); fail(d.error); fail(e.error);
-  members = d.data.map((m) => ({ userId: m.user_id, role: m.role, email: m.profiles?.email || "",
+  fail(a.error); fail(b.error); fail(c.error); fail(d.error); fail(e.error); fail(f.error); fail(g.error);
+  members = d.data.map((m) => ({ userId: m.user_id, role: m.role, email: m.profiles?.email || "", phone: m.profiles?.phone || "",
     name: m.profiles?.full_name || m.profiles?.email || "Unnamed" }));
   invites = e.data;
+  settings = Object.fromEntries(f.data.map((r) => [r.user_id, { workingHours: r.working_hours, takesClasses: r.takes_classes }]));
+  leaves = g.data;
   students = c.data;
   sessions = a.data.map(fromRow);
   const byId = new Map(sessions.map((s) => [s.id, s]));
@@ -52,7 +57,7 @@ export async function loadAll(userId, preferredOrg) {
     timeline.push({ sessionId: s.id, title: s.title, occurrence: m.occurrence, at: new Date(m.marked_at).getTime() });
   }
 }
-export function clearAll() { sessions = []; timeline = []; students = []; org = null; orgs = []; members = []; invites = []; }
+export function clearAll() { sessions = []; timeline = []; students = []; org = null; orgs = []; members = []; invites = []; settings = {}; leaves = []; }
 
 export async function getProfile(userId) {
   const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
@@ -201,4 +206,51 @@ export async function convertToBusiness(name) {
   const { data, error } = await supabase.from("organisations").update({ type: "business", name }).eq("id", org.id).select().single();
   fail(error);
   org.type = data.type; org.name = data.name;
+}
+
+// ---------- profile: working hours, leaves, timesheet ----------
+const DEFAULT_HOURS = () => Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, ["11:00", "19:00"]]));
+export const getHours = (userId) => settings[userId]?.workingHours ?? DEFAULT_HOURS(); // weekday (0=Sun) -> ["09:00","17:00"]; missing = closed
+export const takesClasses = (userId) => settings[userId]?.takesClasses ?? true;
+
+export async function saveSettings(userId, patch) {
+  const next = { workingHours: null, takesClasses: true, ...settings[userId], ...patch };
+  const { error } = await supabase.from("member_settings").upsert(
+    { org_id: org.id, user_id: userId, working_hours: next.workingHours, takes_classes: next.takesClasses, updated_at: new Date().toISOString() },
+    { onConflict: "org_id,user_id" });
+  fail(error);
+  settings[userId] = next;
+}
+
+export const getLeaves = (userId) => leaves.filter((l) => l.user_id === userId);
+export const onLeave = (userId, k) => leaves.some((l) => l.user_id === userId && l.start_date <= k && k <= l.end_date);
+export async function addLeave(userId, from, to, reason) {
+  const { data, error } = await supabase.from("leaves")
+    .insert({ org_id: org.id, user_id: userId, start_date: from, end_date: to, reason: reason || null }).select().single();
+  fail(error);
+  leaves.push(data);
+}
+export async function deleteLeave(id) {
+  const { error } = await supabase.from("leaves").delete().eq("id", id);
+  fail(error);
+  leaves = leaves.filter((l) => l.id !== id);
+}
+
+export async function saveProfile({ fullName, phone }) {
+  const { data, error } = await supabase.from("profiles").update({ full_name: fullName, phone: phone || null }).eq("id", myId).select().single();
+  fail(error);
+  const m = members.find((x) => x.userId === myId);
+  if (m) { m.name = data.full_name || m.email; m.phone = data.phone || ""; }
+}
+
+const hoursBetween = (a, b) => { const h = (t) => { const [x, y] = t.split(":").map(Number); return x + y / 60; }; return h(b) - h(a); };
+// One person's sessions between two dates (YYYY-MM-DD), with hours and whether attendance was marked.
+export function timesheet(userId, fromYmd, toYmd) {
+  const rows = [], d = parseYmd(fromYmd), end = parseYmd(toYmd);
+  for (let i = 0; d <= end && i < 800; i++, d.setDate(d.getDate() + 1)) {
+    for (const s of sessionsOn(d)) {
+      if (s.staffId === userId) rows.push({ date: ymd(d), title: s.title, student: s.student, start: s.start, end: s.end, hours: hoursBetween(s.start, s.end), marked: s.marked });
+    }
+  }
+  return rows;
 }
