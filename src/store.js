@@ -101,3 +101,17 @@ export async function unmarkAttendance(id, occurrence) {
   s.marked = s.marked.filter((o) => o !== occurrence);
   timeline = timeline.filter((t) => !(t.sessionId === id && t.occurrence === occurrence));
 }
+
+// Scheduled sessions in one month (month is 0-11): total, distinct students, and per class title.
+export function monthStats(year, month) {
+  const byTitle = {}, students = new Set();
+  let classes = 0;
+  for (const d = new Date(year, month, 1); d.getMonth() === month; d.setDate(d.getDate() + 1)) {
+    for (const s of sessionsOn(d)) {
+      classes++;
+      byTitle[s.title] = (byTitle[s.title] || 0) + 1;
+      students.add(s.student.trim().toLowerCase());
+    }
+  }
+  return { classes, students: students.size, byTitle };
+}

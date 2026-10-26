@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -19,24 +19,45 @@ const fmtT = (t) => { const [h, m] = t.split(":").map(Number); return `${String(
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // ---------- calendar ----------
-let weekStart = mondayOf(new Date());
+let view = "week";                       // "day" | "week" | "month"
+let anchor = new Date(); anchor.setHours(0, 0, 0, 0); // the date the calendar is centred on
+
+// Sessions that overlap in time sit side by side instead of on top of each other.
+function layout(evs) {
+  const sorted = [...evs].sort((a, b) => toH(a.start) - toH(b.start) || toH(b.end) - toH(a.end));
+  const out = []; let cluster = [], clusterEnd = -1;
+  const flush = () => { const n = Math.max(...cluster.map((e) => e.lane)) + 1; cluster.forEach((e) => (e.lanes = n)); out.push(...cluster); cluster = []; };
+  for (const e of sorted) {
+    if (cluster.length && toH(e.start) >= clusterEnd) { flush(); clusterEnd = -1; }
+    const used = new Set(cluster.filter((c) => toH(c.end) > toH(e.start)).map((c) => c.lane));
+    let lane = 0; while (used.has(lane)) lane++;
+    e.lane = lane; cluster.push(e); clusterEnd = Math.max(clusterEnd, toH(e.end));
+  }
+  if (cluster.length) flush();
+  return out;
+}
 
 function renderWeek() {
   HOUR_PX = phone.matches ? 44 : 64;
-  $("grid").style.setProperty("--hour", HOUR_PX + "px");
-  const days = [...Array(7)].map((_, i) => addDays(weekStart, i));
+  const grid = $("grid");
+  grid.style.setProperty("--hour", HOUR_PX + "px");
   const todayKey = ymd(new Date());
+  if (view === "month") return renderMonth(todayKey);
+
+  const days = view === "day" ? [anchor] : [...Array(7)].map((_, i) => addDays(mondayOf(anchor), i));
+  grid.style.setProperty("--cols", days.length);
   const colH = (END_H - START_H) * HOUR_PX;
   const now = new Date(), nowH = now.getHours() + now.getMinutes() / 60;
 
-  const heads = '<div class="corner"></div>' +
-    days.map((d) => `<div class="${ymd(d) === todayKey ? "today" : ""}">${d.toLocaleDateString("en-GB", { weekday: "short" })} <span class="dm">${d.getDate()}</span> <span class="mo">${d.toLocaleDateString("en-GB", { month: "short" })}</span></div>`).join("");
+  const heads = '<div class="corner"></div>' + days.map((d) =>
+    `<div class="${ymd(d) === todayKey ? "today" : ""}">${d.toLocaleDateString("en-GB", { weekday: "short" })} <span class="dm">${d.getDate()}</span> <span class="mo">${d.toLocaleDateString("en-GB", { month: "short" })}</span></div>`).join("");
   const times = [...Array(END_H - START_H)].map((_, i) => `<div>${i ? hourLabel(START_H + i) : ""}</div>`).join("");
 
   const cols = days.map((d) => {
-    const events = sessionsOn(d).map((s) => {
+    const events = layout(sessionsOn(d)).map((s) => {
       const top = (toH(s.start) - START_H) * HOUR_PX, h = (toH(s.end) - toH(s.start)) * HOUR_PX;
-      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}</small></button>`;
+      const pos = `left:calc(${(s.lane * 100) / s.lanes}% + 2px);width:calc(${100 / s.lanes}% - 4px)`;
+      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px;${pos}"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}</small></button>`;
     }).join("");
     const nowLine = ymd(d) === todayKey && nowH >= START_H && nowH <= END_H
       ? `<div class="now" style="top:${(nowH - START_H) * HOUR_PX}px"></div>` : "";
@@ -45,18 +66,45 @@ function renderWeek() {
       <div class="off" style="top:${(CLOSE - START_H) * HOUR_PX}px;bottom:0"></div>${events}${nowLine}</div>`;
   }).join("");
 
-  $("grid").innerHTML = `<div class="heads">${heads}</div><div class="body"><div class="times">${times}</div>${cols}</div>`;
-  const o = { day: "numeric", month: "short" }, last = days[6];
-  $("range").textContent = `${days[0].toLocaleDateString("en-GB", o)} – ${last.toLocaleDateString("en-GB", o)}, ${last.getFullYear()}`;
+  grid.innerHTML = `<div class="heads">${heads}</div><div class="body"><div class="times">${times}</div>${cols}</div>`;
+  const o = { day: "numeric", month: "short" }, first = days[0], last = days[days.length - 1];
+  $("range").textContent = view === "day"
+    ? first.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+    : `${first.toLocaleDateString("en-GB", o)} – ${last.toLocaleDateString("en-GB", o)}, ${last.getFullYear()}`;
 }
 
+function renderMonth(todayKey) {
+  const y = anchor.getFullYear(), m = anchor.getMonth();
+  const first = new Date(y, m, 1), lead = (first.getDay() + 6) % 7;
+  const weeks = Math.ceil((lead + new Date(y, m + 1, 0).getDate()) / 7);
+  const max = phone.matches ? 2 : 3;
+  const head = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="mh">${d}</div>`).join("");
+  const cells = [...Array(weeks * 7)].map((_, i) => {
+    const d = addDays(first, i - lead), evs = sessionsOn(d);
+    const chips = evs.slice(0, max).map((s) => `<button class="chip" data-id="${s.id}">${s.marked ? "&#10003; " : ""}${esc(s.title)}</button>`).join("");
+    return `<div class="mcell${d.getMonth() !== m ? " out" : ""}${ymd(d) === todayKey ? " today" : ""}" data-date="${ymd(d)}"><span class="dn">${d.getDate()}</span>${chips}${evs.length > max ? `<div class="more">+${evs.length - max} more</div>` : ""}</div>`;
+  }).join("");
+  $("grid").innerHTML = `<div class="month">${head}${cells}</div>`;
+  $("range").textContent = first.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+
+function setView(v) { view = v; $("viewSel").value = v; renderWeek(); }
 phone.addEventListener("change", renderWeek);
-$("prev").onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
-$("next").onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
-$("today").onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); };
+const step = (dir) => {
+  anchor = view === "month" ? new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1) : addDays(anchor, dir * (view === "day" ? 1 : 7));
+  renderWeek();
+};
+$("prev").onclick = () => step(-1);
+$("next").onclick = () => step(1);
+$("today").onclick = () => { anchor = new Date(); anchor.setHours(0, 0, 0, 0); renderWeek(); };
+$("viewSel").onchange = (e) => setView(e.target.value);
 
 // Click a session to edit it; click an empty slot to add one at that time.
 $("grid").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (chip) return openDialog({ id: chip.dataset.id });
+  const cell = e.target.closest(".mcell");
+  if (cell) { anchor = parseYmd(cell.dataset.date); return setView("day"); } // click a date to zoom into that day
   const ev = e.target.closest(".ev");
   if (ev) return openDialog({ id: ev.dataset.id });
   const col = e.target.closest(".col");
@@ -107,6 +155,22 @@ dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); }); //
 $("addBtn").onclick = () => openDialog();
 
 // ---------- dashboard ----------
+function renderInsights() {
+  const now = new Date();
+  const ms = [...Array(8)].map((_, i) => {
+    const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return { label: m.toLocaleDateString("en-GB", { month: "short", year: "numeric" }), ...monthStats(m.getFullYear(), m.getMonth()) };
+  });
+  $("prod").innerHTML = `<div class="trow th"><span>Month</span><span>Classes</span><span>Students</span></div>` +
+    ms.map((x) => `<div class="trow"><span>${x.label}</span><span>${x.classes}</span><span>${x.students}</span></div>`).join("");
+  const titles = [...new Set([...Object.keys(ms[0].byTitle), ...Object.keys(ms[1].byTitle)])]
+    .sort((a, b) => (ms[0].byTitle[b] || 0) - (ms[0].byTitle[a] || 0) || (ms[1].byTitle[b] || 0) - (ms[1].byTitle[a] || 0)).slice(0, 5);
+  $("popular").innerHTML = titles.length
+    ? `<div class="trow th"><span>Subject</span><span>This month</span><span>Last month</span></div>` +
+      titles.map((t) => `<div class="trow"><span>${esc(t)}</span><span>${ms[0].byTitle[t] || 0}</span><span>${ms[1].byTitle[t] || 0}</span></div>`).join("")
+    : '<p class="empty">No classes yet.</p>';
+}
+
 function renderDash() {
   const rows = recentOccurrences(5);
   $("att").innerHTML = rows.length ? rows.map((s) => `
@@ -125,6 +189,7 @@ function renderDash() {
   const st = stats();
   $("sClasses").textContent = st.classes;
   $("sStudents").textContent = st.students;
+  renderInsights();
 }
 
 $("att").addEventListener("click", async (e) => {
@@ -213,6 +278,6 @@ if (!auth.configured) {
 setInterval(renderWeek, 60_000); // keeps the red "now" line moving
 
 // Register the (cache-free) service worker so the app can be installed. Live site only.
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+if ("serviceWorker" in navigator && import.meta.env.PROD && !window.Capacitor?.isNativePlatform?.()) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }

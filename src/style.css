@@ -134,3 +134,38 @@ body.authed #authScreen{display:none}
   #range{font-size:11px}
   #sessionForm input,#sessionForm select,.authbox input{font-size:16px} /* stops iPhones zooming in on focus */
 }
+
+/* ---- Native phone apps: keep the top bar clear of the status bar / camera cut-out ---- */
+@media (max-width:760px){
+  .top{height:calc(40px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)}
+  .main{height:calc(100vh - 46px);height:calc(100dvh - 46px)}
+}
+
+/* ---- Day / Week / Month views ---- */
+.heads,.body{grid-template-columns:60px repeat(var(--cols,7),minmax(110px,1fr));min-width:calc(60px + var(--cols,7) * 110px)}
+select.sel{font:inherit;font-size:12px;color:var(--ink)}
+.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-right:1px solid var(--line)}
+.mh{padding:8px 0;text-align:center;font-weight:600;font-size:11px;border-left:1px solid var(--line);background:#fff;position:sticky;top:0;z-index:1}
+.mcell{min-height:104px;padding:4px;border-left:1px solid var(--line);border-top:1px solid var(--line);font-size:11px;overflow:hidden;cursor:pointer}
+.mcell:hover{background:var(--bg2)}
+.mcell.out{background:var(--bg2);color:var(--mute)}
+.mcell .dn{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:11px;font-weight:500}
+.mcell.today .dn{background:var(--blue);color:#fff}
+.chip{display:block;width:100%;margin-top:2px;padding:1px 5px;border:0;border-radius:3px;background:var(--blue-soft);color:var(--blue-ink);font:inherit;font-size:10px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.more{margin-top:2px;font-size:10px;color:var(--mute)}
+
+/* ---- Dashboard tables ---- */
+.panels + .panels{margin-top:20px}
+.trow{display:grid;grid-template-columns:1fr 78px 78px;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:11px}
+.trow:last-child{border:0}
+.trow.th{color:var(--mute);font-weight:600;background:var(--bg2)}
+.trow > :not(:first-child){text-align:right}
+
+@media (max-width:760px){
+  .heads,.body{min-width:0;grid-template-columns:36px repeat(var(--cols,7),minmax(0,1fr))}
+  .bar select.sel{display:inline-block}
+  .mcell{min-height:78px;padding:2px}
+  .mcell .dn{min-width:18px;height:18px;font-size:10px}
+  .chip{font-size:8px;padding:1px 2px}
+  .trow{grid-template-columns:1fr 60px 60px}
+}

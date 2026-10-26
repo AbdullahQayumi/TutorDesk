@@ -38,7 +38,7 @@
         <button id="range" tabindex="-1" style="cursor:default"></button>
         <button id="next" aria-label="Next week">&rsaquo;</button>
       </div>
-      <div class="sel">Week</div>
+      <select id="viewSel" class="sel" aria-label="Calendar view"><option value="day">Day</option><option value="week" selected>Week</option><option value="month">Month</option></select>
       <button id="addBtn" class="add">Add new</button>
     </div>
     <div class="week"><div id="grid"></div></div>
@@ -57,6 +57,10 @@
         <div class="panels">
           <div class="card"><h2>Attendance</h2><div id="att"></div></div>
           <div class="card"><h2>Online Bookings</h2><p class="empty">No bookings yet.</p></div>
+        </div>
+        <div class="panels">
+          <div class="card"><h2>Popular classes</h2><div id="popular"></div></div>
+          <div class="card"><h2>Productivity</h2><div id="prod"></div></div>
         </div>
       </div>
       <aside class="dash-r"><h2>Timeline</h2><div id="tl"></div></aside>
