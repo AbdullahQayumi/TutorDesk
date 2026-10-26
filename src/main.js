@@ -3,7 +3,9 @@ import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, mark
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
-const START_H = 0, END_H = 24, HOUR_PX = 64, OPEN = 11, CLOSE = 19;
+const START_H = 0, END_H = 24, OPEN = 11, CLOSE = 19;
+const phone = window.matchMedia("(max-width: 760px)"); // phones get a compact calendar
+let HOUR_PX = phone.matches ? 44 : 64;
 
 // ---------- small helpers ----------
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -20,19 +22,21 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 let weekStart = mondayOf(new Date());
 
 function renderWeek() {
+  HOUR_PX = phone.matches ? 44 : 64;
+  $("grid").style.setProperty("--hour", HOUR_PX + "px");
   const days = [...Array(7)].map((_, i) => addDays(weekStart, i));
   const todayKey = ymd(new Date());
   const colH = (END_H - START_H) * HOUR_PX;
   const now = new Date(), nowH = now.getHours() + now.getMinutes() / 60;
 
   const heads = '<div class="corner"></div>' +
-    days.map((d) => `<div class="${ymd(d) === todayKey ? "today" : ""}">${fmtDay(d)}</div>`).join("");
+    days.map((d) => `<div class="${ymd(d) === todayKey ? "today" : ""}">${d.toLocaleDateString("en-GB", { weekday: "short" })} <span class="dm">${d.getDate()}</span> <span class="mo">${d.toLocaleDateString("en-GB", { month: "short" })}</span></div>`).join("");
   const times = [...Array(END_H - START_H)].map((_, i) => `<div>${i ? hourLabel(START_H + i) : ""}</div>`).join("");
 
   const cols = days.map((d) => {
     const events = sessionsOn(d).map((s) => {
       const top = (toH(s.start) - START_H) * HOUR_PX, h = (toH(s.end) - toH(s.start)) * HOUR_PX;
-      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px">${fmtT(s.start)} - ${fmtT(s.end)}<br>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}</small></button>`;
+      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}</small></button>`;
     }).join("");
     const nowLine = ymd(d) === todayKey && nowH >= START_H && nowH <= END_H
       ? `<div class="now" style="top:${(nowH - START_H) * HOUR_PX}px"></div>` : "";
@@ -46,6 +50,7 @@ function renderWeek() {
   $("range").textContent = `${days[0].toLocaleDateString("en-GB", o)} – ${last.toLocaleDateString("en-GB", o)}, ${last.getFullYear()}`;
 }
 
+phone.addEventListener("change", renderWeek);
 $("prev").onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(); };
 $("next").onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(); };
 $("today").onclick = () => { weekStart = mondayOf(new Date()); renderWeek(); };
