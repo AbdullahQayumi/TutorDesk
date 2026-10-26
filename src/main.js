@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 // ---------- calendar ----------
 let view = "week";                       // "day" | "week" | "month"
 let anchor = new Date(); anchor.setHours(0, 0, 0, 0); // the date the calendar is centred on
+
+let staffFilter = "all"; // business accounts can look at one staff member's calendar
+const daySessions = (d) => sessionsOn(d).filter((s) => staffFilter === "all" || s.staffId === staffFilter);
 
 // Sessions that overlap in time sit side by side instead of on top of each other.
 function layout(evs) {
@@ -54,10 +57,10 @@ function renderWeek() {
   const times = [...Array(END_H - START_H)].map((_, i) => `<div>${i ? hourLabel(START_H + i) : ""}</div>`).join("");
 
   const cols = days.map((d) => {
-    const events = layout(sessionsOn(d)).map((s) => {
+    const events = layout(daySessions(d)).map((s) => {
       const top = (toH(s.start) - START_H) * HOUR_PX, h = (toH(s.end) - toH(s.start)) * HOUR_PX;
       const pos = `left:calc(${(s.lane * 100) / s.lanes}% + 2px);width:calc(${100 / s.lanes}% - 4px)`;
-      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px;${pos}"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}</small></button>`;
+      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px;${pos}"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}${getOrg().type === "business" ? " · " + esc(staffName(s.staffId)) : ""}</small></button>`;
     }).join("");
     const nowLine = ymd(d) === todayKey && nowH >= START_H && nowH <= END_H
       ? `<div class="now" style="top:${(nowH - START_H) * HOUR_PX}px"></div>` : "";
@@ -80,7 +83,7 @@ function renderMonth(todayKey) {
   const max = phone.matches ? 2 : 3;
   const head = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="mh">${d}</div>`).join("");
   const cells = [...Array(weeks * 7)].map((_, i) => {
-    const d = addDays(first, i - lead), evs = sessionsOn(d);
+    const d = addDays(first, i - lead), evs = daySessions(d);
     const chips = evs.slice(0, max).map((s) => `<button class="chip" data-id="${s.id}">${s.marked ? "&#10003; " : ""}${esc(s.title)}</button>`).join("");
     return `<div class="mcell${d.getMonth() !== m ? " out" : ""}${ymd(d) === todayKey ? " today" : ""}" data-date="${ymd(d)}"><span class="dn">${d.getDate()}</span>${chips}${evs.length > max ? `<div class="more">+${evs.length - max} more</div>` : ""}</div>`;
   }).join("");
@@ -130,7 +133,14 @@ function openDialog({ id, date, start } = {}) {
     date: s?.date ?? date ?? ymd(new Date()), start: s?.start ?? startH,
     end: s?.end ?? (parseInt(startH, 10) >= 23 ? "23:59" : hourStr(parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
   };
+  const editable = !s || canEditSession(s);
+  form.elements.staffId.innerHTML = getMembers().map((m) => `<option value="${m.userId}">${esc(m.name)}</option>`).join("");
+  v.staffId = s?.staffId ?? getMe().id;
   for (const [k, val] of Object.entries(v)) form.elements[k].value = val;
+  $("staffWrap").hidden = !(getOrg().type === "business" && isAdmin());
+  form.querySelectorAll("input,select").forEach((i) => { i.disabled = !editable; });
+  form.querySelector("button[type=submit]").hidden = !editable;
+  if (!editable) { $("dlgDelete").hidden = true; $("dlgError").textContent = "This session belongs to another staff member, so you can only view it."; }
   dlg.showModal();
   form.elements.title.focus();
 }
@@ -232,9 +242,11 @@ let peopleTab = "students";
 const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 function renderPeople() {
   document.querySelectorAll("#peopleView [data-sub]").forEach((b) => b.classList.toggle("on", b.dataset.sub === peopleTab));
-  const isStudents = peopleTab === "students";
+  const isStudents = peopleTab === "students", isTeam = peopleTab === "team";
   $("studentsPane").hidden = !isStudents;
-  $("peopleSoon").hidden = isStudents;
+  $("teamPane").hidden = !isTeam;
+  $("peopleSoon").hidden = isStudents || isTeam;
+  if (isTeam) return renderTeam();
   if (!isStudents) { $("peopleSoonTitle").textContent = peopleTab === "batches" ? "Batches" : "Guardians"; return; }
   const all = listStudents(), q = $("stSearch").value.trim().toLowerCase(), f = $("stFilter").value;
   const rows = all.filter((s) => (f === "all" || s.status === f) && `${s.name} ${s.email || ""} ${s.phone || ""}`.toLowerCase().includes(q));
@@ -282,16 +294,89 @@ $("stDelete").onclick = async () => {
 };
 stDlg.addEventListener("click", (e) => { if (e.target === stDlg) stDlg.close(); });
 
+// ---------- people: team (Solo accounts see what Business adds) ----------
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+function renderTeam() {
+  const o = getOrg(), me = getMe(), admin = isAdmin(), body = $("teamBody");
+  $("teamHint").textContent = o.type === "business" ? `${o.name} · you are ${me.role === "owner" ? "the owner" : "an " + me.role}` : "Account type: Solo";
+  if (o.type === "solo") {
+    body.innerHTML = `<div class="card"><h2>You're on a Solo account</h2><div class="pad"><p>Solo accounts are for one tutor: your own calendar, students and attendance.</p><p><b>Business accounts</b> let you invite staff, assign sessions to them, switch between everyone's calendars and share one student list across your team.</p>${me.role === "owner" ? '<button id="toBiz" class="add">Switch to a Business account</button>' : ""}</div></div>`;
+    return;
+  }
+  const editable = (m) => admin && m.role !== "owner" && m.userId !== me.id;
+  const rows = getMembers().map((m) => `<tr><td><span class="av">${esc(initials(m.name))}</span>${esc(m.name)}${m.userId === me.id ? " (you)" : ""}</td><td>${esc(m.email)}</td><td>${editable(m)
+      ? `<select class="sel" data-role="${m.userId}"><option value="admin"${m.role === "admin" ? " selected" : ""}>Admin</option><option value="staff"${m.role === "staff" ? " selected" : ""}>Staff</option></select>`
+      : `<span class="pill ${m.role === "staff" ? "inactive" : "active"}">${cap(m.role)}</span>`}</td><td>${editable(m) ? `<button class="undo" data-remove="${m.userId}">Remove</button>` : ""}</td></tr>`).join("");
+  const pending = getInvites().map((i) => `<tr><td>${esc(i.email)}</td><td>${cap(i.role)}</td><td><button class="undo" data-revoke="${i.id}">Revoke</button></td></tr>`).join("");
+  body.innerHTML = `<div class="tblwrap"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+    + (admin
+      ? `<h2 class="sect">Invite someone</h2><form id="inviteForm" class="toolbar"><input id="invEmail" type="email" required placeholder="Email address" aria-label="Email address"><select id="invRole" class="sel" aria-label="Role"><option value="staff">Staff</option><option value="admin">Admin</option></select><button class="add" type="submit">Send invite</button></form><p class="hint">Staff manage their own sessions and attendance. Admins manage everything and the team. They join automatically when they sign up or log in with this email. Invites aren't emailed yet, so send them the link yourself.</p>`
+        + (pending ? `<h2 class="sect">Pending invites</h2><div class="tblwrap"><table class="tbl"><tbody>${pending}</tbody></table></div>` : "")
+      : `<p class="hint">Only owners and admins can invite or remove people.</p>`)
+    + `<p id="teamErr" class="err" role="alert"></p>`;
+}
+const teamErr = (m) => { $("teamErr").textContent = m; };
+$("teamBody").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try { await inviteMember($("invEmail").value, $("invRole").value); renderTeam(); } catch (err) { teamErr(err.message); }
+});
+$("teamBody").addEventListener("change", async (e) => {
+  const sel = e.target.closest("[data-role]");
+  if (!sel) return;
+  try { await setRole(sel.dataset.role, sel.value); renderTeam(); } catch (err) { teamErr(err.message); }
+});
+$("teamBody").addEventListener("click", async (e) => {
+  const rm = e.target.closest("[data-remove]"), rv = e.target.closest("[data-revoke]"), biz = e.target.closest("#toBiz");
+  try {
+    if (rm) { if (!confirm("Remove this person? Their sessions will be reassigned to you.")) return; await removeMember(rm.dataset.remove); applyOrgUI(); renderAll(); }
+    else if (rv) await revokeInvite(rv.dataset.revoke);
+    else if (biz) { const n = prompt("What is your business called?"); if (!n || !n.trim()) return; await convertToBusiness(n.trim()); applyOrgUI(); renderAll(); }
+    else return;
+    renderTeam();
+  } catch (err) { teamErr(err.message); }
+});
+
+// ---------- workspace switcher, staff filter, header ----------
+let authUser = null;
+const savedOrg = () => { try { return localStorage.getItem("tutordesk.org"); } catch { return null; } };
+function applyOrgUI() {
+  const o = getOrg(), me = getMe(), biz = o.type === "business";
+  $("whoEmail").textContent = biz ? o.name : authUser.email;
+  $("barName").hidden = biz;
+  $("staffSel").hidden = !biz;
+  if (!getMembers().some((m) => m.userId === staffFilter)) staffFilter = "all";
+  $("staffSel").innerHTML = '<option value="all">Everyone</option>' + getMembers().map((m) => `<option value="${m.userId}">${esc(m.name)}${m.userId === me.id ? " (me)" : ""}</option>`).join("");
+  $("staffSel").value = staffFilter;
+  const list = getOrgs();
+  $("orgSel").hidden = list.length < 2;
+  $("orgSel").innerHTML = list.map((x) => `<option value="${x.id}">${esc(x.name)} (${x.type})</option>`).join("");
+  $("orgSel").value = o.id;
+}
+$("staffSel").onchange = (e) => { staffFilter = e.target.value; renderWeek(); };
+$("orgSel").onchange = async (e) => {
+  try { localStorage.setItem("tutordesk.org", e.target.value); } catch { /* ignore */ }
+  try { await loadAll(authUser.id, e.target.value); } catch (err) { return alert(err.message); }
+  staffFilter = "all"; applyOrgUI(); renderAll(); renderPeople();
+};
+
 function renderAll() { renderWeek(); renderDash(); }
 
 // ---------- log in / sign up ----------
 let mode = "login";
+function syncBiz() {
+  const biz = mode === "signup" && document.querySelector("[name=acct]:checked").value === "business";
+  $("authBizWrap").hidden = !biz;
+  $("authBiz").required = biz;
+}
+document.querySelectorAll("[name=acct]").forEach((r) => (r.onchange = syncBiz));
 function setMode(m) {
   mode = m;
   const signup = m === "signup";
   $("authTitle").textContent = signup ? "Create your account" : "Log in";
   $("authSubmit").textContent = signup ? "Create account" : "Log in";
   $("authNameWrap").hidden = !signup;
+  $("authType").hidden = !signup;
+  syncBiz();
   $("authToggleText").textContent = signup ? "Already have an account?" : "New here?";
   $("authToggle").textContent = signup ? "Log in" : "Create an account";
   $("authPassword").autocomplete = signup ? "new-password" : "current-password";
@@ -306,7 +391,7 @@ $("authForm").addEventListener("submit", async (e) => {
   try {
     const email = $("authEmail").value.trim(), password = $("authPassword").value;
     if (mode === "login") await auth.signIn(email, password);
-    else if (!(await auth.signUp(email, password, $("authName").value.trim()))) {
+    else if (!(await auth.signUp(email, password, $("authName").value.trim(), document.querySelector("[name=acct]:checked").value, $("authBiz").value.trim()))) {
       setMode("login");
       msg.className = "hint";
       msg.textContent = "Check your email to confirm your account, then log in.";
@@ -325,10 +410,11 @@ async function handleUser(user) {
   document.body.classList.toggle("authed", !!user);
   if (!user) { clearAll(); $("authPassword").value = ""; return; }
   try {
-    const [profile] = await Promise.all([getProfile(user.id), loadAll()]);
+    const [profile] = await Promise.all([getProfile(user.id), loadAll(user.id, savedOrg())]);
     const name = profile?.full_name || user.email.split("@")[0];
     $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
-    $("whoEmail").textContent = user.email;
+    authUser = user;
+    applyOrgUI();
     renderAll();
     show(SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "cal");
     document.querySelector(".week").scrollTop = (OPEN - START_H - 0.5) * HOUR_PX;

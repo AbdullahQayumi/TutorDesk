@@ -212,3 +212,18 @@ select.sel{font:inherit;font-size:12px;color:var(--ink)}
   .pane{padding:16px}
   .toolbar input,#studentForm input,#studentForm select{font-size:16px}
 }
+
+/* ---- Solo / Business accounts ---- */
+.typebox{border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:0;display:grid;gap:8px}
+.typebox legend{font-size:11px;color:var(--mute);padding:0 4px}
+.authbox .opt{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--ink);cursor:pointer}
+.authbox .opt input{width:auto;padding:0;border:0;margin-top:2px}
+.opt span{display:block;line-height:1.35}
+.opt b{display:block}
+.pad{padding:14px}
+.pad p{margin:0 0 10px}
+.sect{font-size:13px;margin:24px 0 0}
+#orgSel{max-width:190px}
+#teamBody .toolbar{margin:10px 0}
+#staffSel{max-width:170px}
+@media (max-width:760px){ .bar{flex-wrap:wrap} #orgSel{max-width:120px} }

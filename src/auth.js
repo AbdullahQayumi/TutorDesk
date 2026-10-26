@@ -11,8 +11,9 @@ export async function signIn(email, password) {
   if (error) throw error;
 }
 // Returns true if the user is logged in straight away, false if they must confirm their email first.
-export async function signUp(email, password, fullName) {
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } });
+export async function signUp(email, password, fullName, accountType = "solo", businessName = "") {
+  const { data, error } = await supabase.auth.signUp({ email, password,
+    options: { data: { full_name: fullName, account_type: accountType, business_name: businessName } } });
   if (error) throw error;
   return !!data.session;
 }

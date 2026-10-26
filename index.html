@@ -30,6 +30,7 @@
 <div class="main">
   <header class="top">
     <span>Search</span>
+    <select id="orgSel" class="sel" hidden aria-label="Workspace"></select>
     <div class="who"><b id="whoName">Your Name</b><span id="whoEmail"></span></div>
     <button id="logoutBtn" class="logout">Log out</button>
   </header>
@@ -37,6 +38,7 @@
   <section id="calView" class="view on">
     <div class="bar">
       <div class="sel" id="barName">Your Name</div>
+      <select id="staffSel" class="sel" hidden aria-label="Staff calendar"></select>
       <div class="sel">Select location</div>
       <div class="nav">
         <button id="prev" aria-label="Previous week">&lsaquo;</button>
@@ -79,6 +81,7 @@
       <span class="sublabel">SETUP</span>
       <button data-sub="batches">Batches</button>
       <button data-sub="guardians">Guardians</button>
+      <button data-sub="team">Team</button>
     </nav>
     <div class="pane">
       <div id="studentsPane">
@@ -96,6 +99,10 @@
           <select id="stFilter" class="sel" aria-label="Filter students"><option value="all">All students</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
         </div>
         <div id="studentTable" class="tblwrap"></div>
+      </div>
+      <div id="teamPane" hidden>
+        <div class="phead"><div><h1>Team</h1><p class="hint" id="teamHint"></p></div></div>
+        <div id="teamBody"></div>
       </div>
       <div id="peopleSoon" class="soon" hidden><h1 id="peopleSoonTitle"></h1><p>Coming in a later phase.</p></div>
     </div>
@@ -119,6 +126,7 @@
     <label>Repeats
       <select name="repeat"><option value="none">Does not repeat</option><option value="weekly">Every week</option></select>
     </label>
+    <label id="staffWrap" hidden>Staff member <select name="staffId"></select></label>
     <p id="dlgHint" class="hint" hidden>Changes apply to every repeat of this session.</p>
     <p id="dlgError" class="err" role="alert"></p>
     <div class="actions">
@@ -150,6 +158,12 @@
   <form id="authForm" class="authbox">
     <h1 id="authTitle">Log in</h1>
     <label id="authNameWrap" hidden>Your name <input id="authName" maxlength="80" autocomplete="name"></label>
+    <fieldset id="authType" class="typebox" hidden>
+      <legend>Account type</legend>
+      <label class="opt"><input type="radio" name="acct" value="solo" checked><span><b>Solo tutor</b>Just you: your calendar, students and attendance.</span></label>
+      <label class="opt"><input type="radio" name="acct" value="business"><span><b>Business</b>A team: invite staff, assign them sessions and see everyone's calendar.</span></label>
+    </fieldset>
+    <label id="authBizWrap" hidden>Business name <input id="authBiz" maxlength="80"></label>
     <label>Email <input id="authEmail" type="email" required autocomplete="email"></label>
     <label>Password <input id="authPassword" type="password" required minlength="8" autocomplete="current-password"></label>
     <p id="authMsg" class="err" role="alert"></p>
