@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -40,10 +40,15 @@ function layout(evs) {
   return out;
 }
 
+// Each class gets a colour from its name, so the calendar is easy to scan.
+const colorOf = (t) => "c" + ([...t].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 6);
+// "✓ " when everyone was present, "2/3 " when only some were
+const attMark = (s) => (s.total && s.presentCount === s.total ? "&#10003; " : s.presentCount ? `${s.presentCount}/${s.total} ` : "");
+
 // Shading: outside the viewed person's working hours, and the whole day when they are on leave.
 function offBlocks(d) {
   const who = staffFilter === "all" ? getMe().id : staffFilter, h = getHours(who)[d.getDay()];
-  if (onLeave(who, ymd(d))) return '<div class="off" style="top:0;bottom:0"></div><span class="leave">On leave</span>';
+  if (onLeave(who, ymd(d))) return '<div class="off lv" style="top:0;bottom:0"></div><span class="leave">On leave</span>';
   if (!h) return '<div class="off" style="top:0;bottom:0"></div>';
   return `<div class="off" style="top:0;height:${(toH(h[0]) - START_H) * HOUR_PX}px"></div><div class="off" style="top:${(toH(h[1]) - START_H) * HOUR_PX}px;bottom:0"></div>`;
 }
@@ -68,7 +73,7 @@ function renderWeek() {
     const events = layout(daySessions(d)).map((s) => {
       const top = (toH(s.start) - START_H) * HOUR_PX, h = (toH(s.end) - toH(s.start)) * HOUR_PX;
       const pos = `left:calc(${(s.lane * 100) / s.lanes}% + 2px);width:calc(${100 / s.lanes}% - 4px)`;
-      return `<button class="ev" data-id="${s.id}" style="top:${top}px;height:${h}px;${pos}"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${s.marked ? "&#10003; " : ""}${esc(s.title)}<small>${esc(s.student)}${getOrg().type === "business" ? " · " + esc(staffName(s.staffId)) : ""}</small></button>`;
+      return `<button class="ev ${colorOf(s.title)}" data-id="${s.id}" data-occ="${s.occurrence}" style="top:${top}px;height:${h}px;${pos}"><span class="tm">${fmtT(s.start)} - ${fmtT(s.end)}<br></span>${attMark(s)}${esc(s.title)}<small>${esc(studentLabel(s))}${getOrg().type === "business" ? " · " + esc(staffName(s.staffId)) : ""}</small></button>`;
     }).join("");
     const nowLine = ymd(d) === todayKey && nowH >= START_H && nowH <= END_H
       ? `<div class="now" style="top:${(nowH - START_H) * HOUR_PX}px"></div>` : "";
@@ -91,7 +96,7 @@ function renderMonth(todayKey) {
   const head = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => `<div class="mh">${d}</div>`).join("");
   const cells = [...Array(weeks * 7)].map((_, i) => {
     const d = addDays(first, i - lead), evs = daySessions(d);
-    const chips = evs.slice(0, max).map((s) => `<button class="chip" data-id="${s.id}">${s.marked ? "&#10003; " : ""}${esc(s.title)}</button>`).join("");
+    const chips = evs.slice(0, max).map((s) => `<button class="chip ${colorOf(s.title)}" data-id="${s.id}" data-occ="${s.occurrence}">${attMark(s)}${esc(s.title)}</button>`).join("");
     return `<div class="mcell${d.getMonth() !== m ? " out" : ""}${ymd(d) === todayKey ? " today" : ""}" data-date="${ymd(d)}"><span class="dn">${d.getDate()}</span>${chips}${evs.length > max ? `<div class="more">+${evs.length - max} more</div>` : ""}</div>`;
   }).join("");
   $("grid").innerHTML = `<div class="month">${head}${cells}</div>`;
@@ -112,11 +117,11 @@ $("viewSel").onchange = (e) => setView(e.target.value);
 // Click a session to edit it; click an empty slot to add one at that time.
 $("grid").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
-  if (chip) return openDialog({ id: chip.dataset.id });
+  if (chip) return openOcc(chip.dataset.id, chip.dataset.occ);
   const cell = e.target.closest(".mcell");
   if (cell) { anchor = parseYmd(cell.dataset.date); return setView("day"); } // click a date to zoom into that day
   const ev = e.target.closest(".ev");
-  if (ev) return openDialog({ id: ev.dataset.id });
+  if (ev) return openOcc(ev.dataset.id, ev.dataset.occ);
   const col = e.target.closest(".col");
   if (!col) return;
   const y = e.clientY - col.getBoundingClientRect().top;
@@ -126,6 +131,25 @@ $("grid").addEventListener("click", (e) => {
 // ---------- add / edit dialog ----------
 const dlg = $("sessionDialog"), form = $("sessionForm");
 
+// The "Students" part of the session form: tick students, add a whole batch, or type a new name.
+const updateCount = () => { $("sCount").textContent = `(${checked($("sStudents")).length} selected)`; };
+function sessionStudentsInit(selected) {
+  checklist($("sStudents"), selected);
+  $("sStuFilter").value = ""; $("sNewStudent").value = "";
+  $("sBatchPick").innerHTML = '<option value="">Add a whole batch…</option>' + listBatches().map((b) => `<option value="${b.id}">${esc(b.name)} (${batchStudentIds(b.id).length})</option>`).join("");
+  updateCount();
+}
+$("sBatchPick").onchange = (e) => {
+  const ids = e.target.value ? batchStudentIds(e.target.value) : [];
+  $("sStudents").querySelectorAll("input").forEach((i) => { if (ids.includes(i.value)) i.checked = true; });
+  e.target.value = ""; updateCount();
+};
+$("sStuFilter").oninput = (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  $("sStudents").querySelectorAll(".chk").forEach((l) => { l.hidden = !!q && !l.textContent.toLowerCase().includes(q); });
+};
+$("sStudents").addEventListener("change", updateCount);
+
 function openDialog({ id, date, start } = {}) {
   const s = id ? getSession(id) : null;
   const startH = start ?? "18:00";
@@ -134,9 +158,9 @@ function openDialog({ id, date, start } = {}) {
   $("dlgHint").hidden = !(s && s.repeat === "weekly");
   $("dlgError").textContent = "";
   form.reset();
-  $("studentList").innerHTML = listStudents().map((x) => `<option value="${esc(x.name)}">`).join("");
+  sessionStudentsInit(s ? s.studentIds : []);
   const v = {
-    id: s?.id ?? "", title: s?.title ?? "", student: s?.student ?? "",
+    id: s?.id ?? "", title: s?.title ?? "",
     date: s?.date ?? date ?? ymd(new Date()), start: s?.start ?? startH,
     end: s?.end ?? (parseInt(startH, 10) >= 23 ? "23:59" : hourStr(parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
   };
@@ -155,13 +179,17 @@ function openDialog({ id, date, start } = {}) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(form));
-  f.title = f.title.trim(); f.student = f.student.trim();
+  f.title = f.title.trim();
   if (f.end <= f.start) { $("dlgError").textContent = "End time must be after the start time."; return; }
   if (!f.id) delete f.id;
   try {
-    // Match the typed name to an existing student, or create the student on the fly.
-    const st = listStudents().find((x) => x.name.toLowerCase() === f.student.toLowerCase()) || await saveStudent({ name: f.student, status: "active" });
-    f.student = st.name; f.studentId = st.id;
+    const ids = checked($("sStudents")), newName = $("sNewStudent").value.trim();
+    if (newName) { // a typed name matches an existing student, or creates a new one
+      const known = listStudents().find((x) => x.name.toLowerCase() === newName.toLowerCase());
+      ids.push((known || await saveStudent({ name: newName, status: "active" })).id);
+    }
+    if (!ids.length) throw new Error("Add at least one student to this session.");
+    f.studentIds = ids;
     await saveSession(f);
   } catch (err) { $("dlgError").textContent = err.message; return; }
   dlg.close();
@@ -194,39 +222,86 @@ function renderInsights() {
     : '<p class="empty">No classes yet.</p>';
 }
 
+function attRow(o, showDate) {
+  const biz = getOrg().type === "business";
+  const sub = `${showDate ? fmtDay(parseYmd(o.occurrence)) + " · " : ""}${fmtT(o.start)} - ${fmtT(o.end)} · ${esc(studentLabel(o))}${biz ? " · " + esc(staffName(o.staffId)) : ""}`;
+  const at = `data-id="${o.id}" data-occ="${o.occurrence}"`;
+  let act;
+  if (o.total === 1 && canEditSession(o)) { // one student: mark with a single tap
+    const sid = o.studentIds[0];
+    act = o.presentCount
+      ? `<span class="act"><span class="mark done">Marked</span><button class="undo" data-act="unmark" ${at} data-sid="${sid}">Unmark</button></span>`
+      : `<button class="mark" data-act="mark" ${at} data-sid="${sid}">Mark attendance</button>`;
+  } else { // a group: open the attendance list
+    act = `<button class="mark${o.total && o.presentCount === o.total ? " done" : ""}" data-act="open" ${at}>${o.total ? `${o.presentCount}/${o.total} present` : "Add students"}</button>`;
+  }
+  return `<div class="row"><div><b class="dot ${colorOf(o.title)}"></b>${esc(o.title)}<br><span>${sub}</span></div>${act}</div>`;
+}
+
 function renderDash() {
-  const rows = recentOccurrences(5);
-  $("att").innerHTML = rows.length ? rows.map((s) => `
-    <div class="row">
-      <div>${esc(s.title)}<br><span>${esc(s.student)} · ${fmtDay(parseYmd(s.occurrence))} · ${fmtT(s.start)} - ${fmtT(s.end)}</span></div>
-      ${s.marked
-        ? `<span class="act"><span class="mark done">Marked</span><button class="undo" data-act="unmark" data-id="${s.id}" data-occ="${s.occurrence}">Unmark</button></span>`
-        : `<button class="mark" data-act="mark" data-id="${s.id}" data-occ="${s.occurrence}">Mark attendance</button>`}
-    </div>`).join("") : '<p class="empty">No past sessions yet. Add one from the calendar.</p>';
-
+  $("todayLine").textContent = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const today = todayOccurrences();
+  $("todayList").innerHTML = today.length ? today.map((o) => attRow(o, false)).join("") : '<p class="empty">Nothing scheduled today.</p>';
+  const rows = recentOccurrences(6);
+  $("att").innerHTML = rows.length ? rows.map((o) => attRow(o, true)).join("") : '<p class="empty">No past sessions yet.</p>';
   const tl = getTimeline();
-  $("tl").innerHTML = tl.length ? tl.map((t) => `
-    <div class="tl"><i></i><p>Attendance for <b>${esc(t.title)}</b> on ${fmtDay(parseYmd(t.occurrence))} was marked.<em>${new Date(t.at).toLocaleString("en-GB")}</em></p></div>`).join("")
-    : '<p class="empty" style="padding:0">Activity will appear here.</p>';
-
+  $("tl").innerHTML = tl.length ? tl.map((t) => `<div class="tl"><i></i><p>Attendance for <b>${esc(t.title)}</b> on ${fmtDay(parseYmd(t.occurrence))}: ${t.count} of ${t.total} present<em>${new Date(t.at).toLocaleString("en-GB")}</em></p></div>`).join("")
+    : '<p class="empty">Activity will appear here.</p>';
   const st = stats();
-  $("sClasses").textContent = st.classes;
-  $("sStudents").textContent = st.students;
+  $("sToday").textContent = today.length; $("sWeek").textContent = st.week; $("sStudents").textContent = st.students;
+  $("sRate").textContent = st.rate == null ? "–" : st.rate + "%";
   renderInsights();
 }
 
-$("att").addEventListener("click", async (e) => {
+const attClick = async (e) => {
   const b = e.target.closest("[data-act]");
   if (!b || b.disabled) return;
+  if (b.dataset.act === "open") return openOcc(b.dataset.id, b.dataset.occ);
   const change = b.dataset.act === "unmark" ? unmarkAttendance : markAttendance;
   b.disabled = true; // stops double-clicks
-  try { await change(b.dataset.id, b.dataset.occ); } catch (err) { b.disabled = false; return alert(err.message); }
+  try { await change(b.dataset.id, b.dataset.occ, b.dataset.sid); } catch (err) { b.disabled = false; return alert(err.message); }
+  renderAll();
+};
+$("att").addEventListener("click", attClick);
+$("todayList").addEventListener("click", attClick);
+$("homeAdd").onclick = () => openDialog();
+
+// The attendance popup: click a session on the calendar (or "x/y present") to tick who was there.
+const occDlg = $("occDialog");
+let occ = null;
+function openOcc(id, occurrence) { occ = { id, occurrence }; renderOcc(); occDlg.showModal(); }
+function renderOcc() {
+  const o = sessionsOn(parseYmd(occ.occurrence)).find((x) => x.id === occ.id);
+  if (!o) { occDlg.close(); return; }
+  const can = canEditSession(o), biz = getOrg().type === "business";
+  $("occTitle").textContent = o.title;
+  $("occWhen").textContent = `${fmtD(o.occurrence)} · ${fmtT(o.start)} - ${fmtT(o.end)}${biz ? " · " + staffName(o.staffId) : ""}`;
+  $("occList").innerHTML = o.studentIds.length
+    ? o.studentIds.map((sid) => `<label class="chk"><input type="checkbox" data-sid="${sid}" ${o.present.includes(sid) ? "checked" : ""} ${can ? "" : "disabled"}> ${esc(getStudent(sid)?.name ?? "Student")}</label>`).join("")
+    : '<p class="hint" style="padding:8px 0">No students in this session yet. Use Edit session to add some.</p>';
+  $("occAll").hidden = !can || !o.studentIds.length;
+  $("occEdit").hidden = !can;
+  $("occErr").textContent = can ? "" : "This session belongs to another staff member, so you can only view it.";
+}
+$("occList").addEventListener("change", async (e) => {
+  const box = e.target.closest("[data-sid]");
+  if (!box) return;
+  try { await (box.checked ? markAttendance : unmarkAttendance)(occ.id, occ.occurrence, box.dataset.sid); }
+  catch (err) { box.checked = !box.checked; $("occErr").textContent = err.message; return; }
   renderAll();
 });
+$("occAll").onclick = async () => {
+  try { await markAllAttendance(occ.id, occ.occurrence); } catch (err) { $("occErr").textContent = err.message; return; }
+  renderAll(); renderOcc();
+};
+$("occEdit").onclick = () => { occDlg.close(); openDialog({ id: occ.id }); };
+$("occClose").onclick = () => occDlg.close();
+occDlg.addEventListener("click", (e) => { if (e.target === occDlg) occDlg.close(); });
 
 // ---------- navigation ----------
 const SECTIONS = ["home", "cal", "people", "resources", "gradebook", "chat", "reports", "profile"];
 const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView" };
+const TITLES = { home: "Home", cal: "Calendar", people: "People", resources: "Resources", gradebook: "Gradebook", chat: "Chat", reports: "Reports", profile: "Profile" };
 const SOON = {
   resources: ["Resources", "Upload and share files and courses with your students."],
   gradebook: ["Gradebook", "Grade your students and track their progress over time."],
@@ -239,24 +314,34 @@ function show(which) {
   if (!REAL[which]) { $("soonTitle").textContent = SOON[which][0]; $("soonText").textContent = SOON[which][1] + " Coming in a later phase."; }
   document.querySelectorAll(".side [data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === which));
   history.replaceState(null, "", "#" + which);
+  $("pageTitle").textContent = TITLES[which];
   if (which === "people") renderPeople();
   if (which === "profile") renderProfile();
 }
 document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => { if (b.dataset.go === "profile") profileId = null; show(b.dataset.go); }));
 
 // ---------- people: students ----------
-let peopleTab = "students";
+let peopleTab = "students", studentOpenId = null; // studentOpenId: the student whose page is showing
 const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 function renderPeople() {
   document.querySelectorAll("#peopleView [data-sub]").forEach((b) => b.classList.toggle("on", b.dataset.sub === peopleTab));
-  const isStudents = peopleTab === "students", isTeam = peopleTab === "team";
-  $("studentsPane").hidden = !isStudents;
-  $("teamPane").hidden = !isTeam;
-  $("peopleSoon").hidden = isStudents || isTeam;
-  if (isTeam) return renderTeam();
-  if (!isStudents) { $("peopleSoonTitle").textContent = peopleTab === "batches" ? "Batches" : "Guardians"; return; }
+  const tab = peopleTab;
+  $("studentsPane").hidden = !(tab === "students" && !studentOpenId);
+  $("studentPage").hidden = !(tab === "students" && studentOpenId);
+  $("teamPane").hidden = tab !== "team";
+  $("batchesPane").hidden = tab !== "batches";
+  $("guardiansPane").hidden = tab !== "guardians";
+  $("peopleSoon").hidden = true;
+  if (tab === "team") return renderTeam();
+  if (tab === "batches") return renderBatches();
+  if (tab === "guardians") return renderGuardians();
+  if (studentOpenId) return renderStudentPage();
+  const keepBatch = $("stBatch").value || "all";
+  $("stBatch").innerHTML = '<option value="all">All batches</option>' + listBatches().map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join("");
+  $("stBatch").value = keepBatch;
+  const bf = $("stBatch").value || "all";
   const all = listStudents(), q = $("stSearch").value.trim().toLowerCase(), f = $("stFilter").value;
-  const rows = all.filter((s) => (f === "all" || s.status === f) && `${s.name} ${s.email || ""} ${s.phone || ""}`.toLowerCase().includes(q));
+  const rows = all.filter((s) => (f === "all" || s.status === f) && (bf === "all" || batchStudentIds(bf).includes(s.id)) && `${s.name} ${s.email || ""} ${s.phone || ""}`.toLowerCase().includes(q));
   $("stActive").textContent = all.filter((s) => s.status === "active").length;
   $("stNew").textContent = all.filter((s) => Date.now() - new Date(s.created_at) < 30 * 864e5).length;
   $("stTotal").textContent = all.length;
@@ -265,9 +350,10 @@ function renderPeople() {
         `<tr data-id="${s.id}" tabindex="0"><td><span class="av">${esc(initials(s.name))}</span>${esc(s.name)}</td><td><span class="pill ${s.status}">${s.status === "active" ? "Active" : "Inactive"}</span></td><td>${esc(s.email || "")}</td><td>${esc(s.phone || "")}</td><td>${new Date(s.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</td></tr>`).join("")}</tbody></table>`
     : `<p class="empty">${all.length ? "No students match your search." : "No students yet. Click Add student to create the first one."}</p>`;
 }
-document.querySelectorAll("#peopleView [data-sub]").forEach((b) => (b.onclick = () => { peopleTab = b.dataset.sub; renderPeople(); }));
+document.querySelectorAll("#peopleView [data-sub]").forEach((b) => (b.onclick = () => { peopleTab = b.dataset.sub; studentOpenId = null; renderPeople(); }));
 $("stSearch").oninput = renderPeople;
 $("stFilter").onchange = renderPeople;
+$("stBatch").onchange = renderPeople;
 
 const stDlg = $("studentDialog"), stForm = $("studentForm");
 function openStudent(id) {
@@ -282,7 +368,7 @@ function openStudent(id) {
   stForm.elements.name.focus();
 }
 $("addStudentBtn").onclick = () => openStudent();
-const rowOpen = (e) => { const r = e.target.closest("tr[data-id]"); if (r) openStudent(r.dataset.id); };
+const rowOpen = (e) => { const r = e.target.closest("tr[data-id]"); if (r) { studentOpenId = r.dataset.id; renderPeople(); } }; // opens the student page
 $("studentTable").addEventListener("click", rowOpen);
 $("studentTable").addEventListener("keydown", (e) => { if (e.key === "Enter") rowOpen(e); });
 stForm.addEventListener("submit", async (e) => {
@@ -300,6 +386,119 @@ $("stDelete").onclick = async () => {
   stDlg.close(); renderPeople(); renderAll();
 };
 stDlg.addEventListener("click", (e) => { if (e.target === stDlg) stDlg.close(); });
+
+// ---------- people: student page, batches, guardians ----------
+const checklist = (el, selected) => {
+  const all = listStudents();
+  el.innerHTML = all.length
+    ? all.map((s) => `<label class="chk"><input type="checkbox" value="${s.id}" ${selected.includes(s.id) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")
+    : '<p class="hint">Add some students first.</p>';
+};
+const checked = (el) => [...el.querySelectorAll("input:checked")].map((i) => i.value);
+const onRow = (fn) => (e) => {
+  if (e.type === "keydown" && e.key !== "Enter") return;
+  const r = e.target.closest("tr[data-id]");
+  if (r) fn(r.dataset.id);
+};
+
+function renderStudentPage() {
+  const s = getStudent(studentOpenId);
+  if (!s) { studentOpenId = null; return renderPeople(); }
+  const { past, upcoming } = studentHistory(s.id), attended = past.filter((r) => r.marked).length;
+  const rate = past.length ? Math.round((100 * attended) / past.length) + "%" : "n/a";
+  const gs = studentGuardians(s.id), bs = studentBatches(s.id), biz = getOrg().type === "business";
+  const staffTxt = (r) => (biz ? " · " + esc(staffName(r.staffId)) : "");
+  $("studentPage").innerHTML = `<button class="linkbtn" id="spBack">&larr; All students</button>
+    <div class="phead" style="margin-top:12px"><div><h1><span class="av">${esc(initials(s.name))}</span>${esc(s.name)} <span class="pill ${s.status}">${s.status === "active" ? "Active" : "Inactive"}</span></h1>
+    <p class="hint">${esc(s.email || "No email")} · ${esc(s.phone || "No phone")}</p></div><button class="add" id="spEdit">Edit student</button></div>
+    <div class="stats"><div class="stat">Attended<b>${attended}</b></div><div class="stat">Past sessions<b>${past.length}</b></div><div class="stat">Attendance rate<b>${rate}</b></div></div>
+    <h2 class="sect">Guardians <button class="undo" id="spAddGuardian">Add guardian</button></h2>
+    ${gs.length ? `<div class="card">${gs.map((g) => `<div class="row"><div>${esc(g.name)}${g.relationship ? ` (${esc(g.relationship)})` : ""}<br><span>${[g.email, g.phone].filter(Boolean).map(esc).join(" · ") || "No contact details"}</span></div></div>`).join("")}</div>` : '<p class="hint">No guardians linked yet.</p>'}
+    <h2 class="sect">Batches</h2>${bs.length ? bs.map((b) => `<span class="pill2">${esc(b.name)}</span>`).join("") : '<p class="hint">Not in any batch.</p>'}
+    <h2 class="sect">Upcoming sessions</h2>${upcoming.length ? `<div class="card">${upcoming.slice(0, 5).map((r) => `<div class="row"><div>${esc(r.title)}<br><span>${fmtD(r.date)} · ${fmtT(r.start)} - ${fmtT(r.end)}${staffTxt(r)}</span></div></div>`).join("")}</div>` : '<p class="hint">Nothing scheduled in the next four weeks.</p>'}
+    <h2 class="sect">Attendance history</h2>${past.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Class</th>${biz ? "<th>Staff</th>" : ""}<th>Attendance</th></tr></thead><tbody>${past.slice(0, 100).map((r) => `<tr style="cursor:default"><td>${fmtD(r.date)}</td><td>${fmtT(r.start)} - ${fmtT(r.end)}</td><td>${esc(r.title)}</td>${biz ? `<td>${esc(staffName(r.staffId))}</td>` : ""}<td><span class="pill ${r.marked ? "active" : "inactive"}">${r.marked ? "Marked" : "Not marked"}</span></td></tr>`).join("")}</tbody></table></div>` : '<p class="hint">No past sessions yet.</p>'}`;
+}
+$("studentPage").addEventListener("click", (e) => {
+  if (e.target.closest("#spBack")) { studentOpenId = null; renderPeople(); }
+  else if (e.target.closest("#spEdit")) openStudent(studentOpenId);
+  else if (e.target.closest("#spAddGuardian")) openGuardian(null, studentOpenId);
+});
+
+// batches
+const bDlg = $("batchDialog"), bForm = $("batchForm");
+function renderBatches() {
+  const list = listBatches();
+  $("batchTable").innerHTML = list.length
+    ? `<table class="tbl"><thead><tr><th>Batch</th><th>Students</th><th>Description</th></tr></thead><tbody>${list.map((b) => {
+        const names = batchStudentIds(b.id).map((i) => getStudent(i)?.name).filter(Boolean);
+        return `<tr data-id="${b.id}" tabindex="0"><td>${esc(b.name)}</td><td>${names.length}${names.length ? " · " + esc(names.slice(0, 3).join(", ")) + (names.length > 3 ? "…" : "") : ""}</td><td>${esc(b.description || "")}</td></tr>`;
+      }).join("")}</tbody></table>`
+    : '<p class="empty">No batches yet. A batch is a group of students, like "Year 5 Maths".</p>';
+}
+function openBatch(id) {
+  const b = id ? getBatch(id) : null;
+  $("bTitle").textContent = b ? "Edit batch" : "Add batch";
+  $("bDelete").hidden = !(b && isAdmin());
+  $("bError").textContent = "";
+  bForm.reset();
+  bForm.elements.id.value = b?.id ?? ""; bForm.elements.name.value = b?.name ?? ""; bForm.elements.description.value = b?.description ?? "";
+  checklist($("bStudents"), b ? batchStudentIds(b.id) : []);
+  bDlg.showModal(); bForm.elements.name.focus();
+}
+$("addBatchBtn").onclick = () => openBatch();
+$("batchTable").addEventListener("click", onRow(openBatch));
+$("batchTable").addEventListener("keydown", onRow(openBatch));
+bForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(bForm));
+  try { await saveBatch({ id: f.id || undefined, name: f.name.trim(), description: f.description.trim(), studentIds: checked($("bStudents")) }); }
+  catch (err) { $("bError").textContent = err.message; return; }
+  bDlg.close(); renderPeople();
+});
+$("bCancel").onclick = () => bDlg.close();
+$("bDelete").onclick = async () => {
+  if (!confirm("Delete this batch? The students stay.")) return;
+  try { await deleteBatch(bForm.elements.id.value); } catch (err) { $("bError").textContent = err.message; return; }
+  bDlg.close(); renderPeople();
+};
+bDlg.addEventListener("click", (e) => { if (e.target === bDlg) bDlg.close(); });
+
+// guardians
+const gDlg = $("guardianDialog"), gForm = $("guardianForm");
+function renderGuardians() {
+  const list = listGuardians();
+  $("guardianTable").innerHTML = list.length
+    ? `<table class="tbl"><thead><tr><th>Name</th><th>Relationship</th><th>Email</th><th>Phone</th><th>Children</th></tr></thead><tbody>${list.map((g) =>
+        `<tr data-id="${g.id}" tabindex="0"><td>${esc(g.name)}</td><td>${esc(g.relationship || "")}</td><td>${esc(g.email || "")}</td><td>${esc(g.phone || "")}</td><td>${esc(guardianStudentIds(g.id).map((i) => getStudent(i)?.name).filter(Boolean).join(", "))}</td></tr>`).join("")}</tbody></table>`
+    : '<p class="empty">No guardians yet. Add a parent or guardian and link them to their children.</p>';
+}
+function openGuardian(id, presetStudentId) {
+  const g = id ? getGuardian(id) : null;
+  $("gTitle").textContent = g ? "Edit guardian" : "Add guardian";
+  $("gDelete").hidden = !(g && isAdmin());
+  $("gError").textContent = "";
+  gForm.reset();
+  for (const k of ["id", "name", "relationship", "email", "phone"]) gForm.elements[k].value = g?.[k] ?? "";
+  checklist($("gStudents"), g ? guardianStudentIds(g.id) : presetStudentId ? [presetStudentId] : []);
+  gDlg.showModal(); gForm.elements.name.focus();
+}
+$("addGuardianBtn").onclick = () => openGuardian();
+$("guardianTable").addEventListener("click", onRow((id) => openGuardian(id)));
+$("guardianTable").addEventListener("keydown", onRow((id) => openGuardian(id)));
+gForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(gForm));
+  try { await saveGuardian({ id: f.id || undefined, name: f.name.trim(), relationship: f.relationship.trim(), email: f.email.trim(), phone: f.phone.trim(), studentIds: checked($("gStudents")) }); }
+  catch (err) { $("gError").textContent = err.message; return; }
+  gDlg.close(); renderPeople();
+});
+$("gCancel").onclick = () => gDlg.close();
+$("gDelete").onclick = async () => {
+  if (!confirm("Delete this guardian?")) return;
+  try { await deleteGuardian(gForm.elements.id.value); } catch (err) { $("gError").textContent = err.message; return; }
+  gDlg.close(); renderPeople();
+};
+gDlg.addEventListener("click", (e) => { if (e.target === gDlg) gDlg.close(); });
 
 // ---------- people: team (Solo accounts see what Business adds) ----------
 const cap = (t) => t[0].toUpperCase() + t.slice(1);
@@ -392,7 +591,7 @@ function renderProfile() {
 function pOverview() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const win = (a, b) => timesheet(profileId, ymd(addDays(today, a)), ymd(addDays(today, b)));
-  const sum = (rows) => ({ c: rows.length, st: new Set(rows.map((r) => r.student.toLowerCase())).size, h: rows.reduce((t, r) => t + r.hours, 0) });
+  const sum = (rows) => ({ c: rows.length, st: new Set(rows.flatMap((r) => r.studentIds)).size, h: rows.reduce((t, r) => t + r.hours, 0) });
   const nx = sum(win(0, 6)), pv = sum(win(-7, -1));
   const stat = (label, a, b) => `<div class="stat">${label}<b>${a}</b><span class="pill2">${b}</span>Last 7 days</div>`;
   return `<div class="stats">${stat("Classes · next 7 days", nx.c, pv.c)}${stat("Students · next 7 days", nx.st, pv.st)}${stat("Hours booked · next 7 days", hrs(nx.h), hrs(pv.h))}</div>
@@ -507,7 +706,7 @@ pForm.addEventListener("submit", async (e) => {
   const name = pForm.elements.name.value.trim();
   try { await saveProfile({ fullName: name, phone: pForm.elements.phone.value.trim() }); } catch (err) { $("pfError").textContent = err.message; return; }
   pDlg.close();
-  $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
+  $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name; $("whoAv").textContent = initials(name);
   renderProfile(); renderAll();
 });
 $("pfCancel").onclick = () => pDlg.close();
@@ -566,7 +765,7 @@ async function handleUser(user) {
   try {
     const [profile] = await Promise.all([getProfile(user.id), loadAll(user.id, savedOrg())]);
     const name = profile?.full_name || user.email.split("@")[0];
-    $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name;
+    $("whoName").textContent = name; $("barName").textContent = name; $("helloName").textContent = name; $("whoAv").textContent = initials(name);
     authUser = user;
     applyOrgUI();
     renderAll();

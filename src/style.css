@@ -264,3 +264,120 @@ select.sel{font:inherit;font-size:12px;color:var(--ink)}
 }
 [data-pmonth]{font-size:20px;line-height:1;text-decoration:none;padding:0 8px}
 .sect + .cols2{margin-top:12px}
+
+/* ---- Batches, guardians, student page ---- */
+#batchForm,#guardianForm{padding:20px;display:grid;gap:12px}
+#batchForm label,#guardianForm label{display:grid;gap:4px;font-size:11px;color:var(--mute)}
+#batchForm input[type=text],#batchForm input:not([type]),#guardianForm input:not([type=checkbox]){font:inherit;font-size:13px;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:#fff}
+#batchForm input:focus-visible,#guardianForm input:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.lbl{display:block;font-size:11px;color:var(--mute);margin-bottom:4px}
+.checklist{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+#batchForm .chk,#guardianForm .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink);padding:4px 0}
+#batchForm .chk input,#guardianForm .chk input{width:auto;padding:0;border:0}
+.sect .undo{margin-left:10px;font-weight:400}
+#studentPage h1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#studentPage .row{border-bottom:1px solid var(--line)}
+@media (max-width:760px){
+  #batchForm input:not([type=checkbox]),#guardianForm input:not([type=checkbox]){font-size:16px}
+}
+
+/* =====================================================================
+   Theme v2: warm paper background, teal brand, roomy cards, coloured classes
+   ===================================================================== */
+:root{--ink:#1d2433;--mute:#667085;--line:#e8e3da;--bg:#fbfaf7;--bg2:#f4f1ea;--blue:#0f766e;--blue-soft:#d9efec;--blue-ink:#0b5f58;--ok:#15803d;--shadow:0 1px 2px rgba(29,36,51,.05),0 6px 18px rgba(29,36,51,.05)}
+html,body{background:var(--bg)}
+body{font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;color:var(--ink)}
+button,input,select,textarea{font-family:inherit}
+h1{font-size:24px;letter-spacing:-.015em;font-weight:700}
+::selection{background:var(--blue);color:#fff}
+.av,.bigav{background:var(--blue-soft);color:var(--blue-ink)}
+
+/* sidebar */
+.side{width:216px;background:#fff;border-right:1px solid var(--line);align-items:stretch;gap:2px;padding:18px 12px;overflow:auto}
+.logo{display:flex;align-items:center;gap:10px;width:auto;height:auto;margin:0 6px 20px;background:none;border-radius:0;color:var(--ink);font-weight:700;font-size:18px;letter-spacing:-.01em}
+.logo .mark{width:32px;height:32px;border-radius:10px;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:17px}
+.side button{width:auto;height:auto;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--mute);font-size:14px;font-weight:500;text-align:left}
+.side button:hover{background:var(--bg2);color:var(--ink)}
+.side button.on{background:var(--blue-soft);color:var(--blue-ink)}
+.side svg{width:20px;height:20px;margin:0;flex-shrink:0}
+
+/* top bar */
+.top{height:60px;gap:14px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);color:var(--ink);font-size:13px}
+.pagetitle{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.spacer{flex:1}
+.who{display:flex;align-items:center;gap:10px}
+.who .av{margin:0;width:34px;height:34px;font-size:12px}
+.who b{font-weight:600}
+.who div span{font-size:11px;color:var(--mute)}
+.logout{padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--mute)}
+
+/* controls */
+.add{border-radius:10px;padding:9px 16px;font-weight:600;box-shadow:0 1px 2px rgba(15,118,110,.25)}
+.add:hover{filter:brightness(1.07)}
+.sel,.nav button{border-radius:10px;background:#fff}
+.nav button:first-child{border-radius:10px 0 0 10px}.nav button:last-child{border-radius:0 10px 10px 0}
+.bar{background:#fff;border-bottom:1px solid var(--line);padding:12px 20px}
+.card,.stat,.tblwrap{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.stat{padding:16px 18px;border-top:1px solid var(--line);color:var(--mute);font-size:12px}
+.stat b{font-size:28px;font-weight:700;color:var(--ink);letter-spacing:-.02em;margin-top:6px}
+.card h2{padding:16px 18px;font-size:15px;font-weight:700}
+.row{padding:14px 18px}
+.trow{padding:11px 18px}
+.empty{padding:22px 18px}
+#tl{padding:6px 18px}
+dialog{border-radius:16px;width:min(440px,94vw)}
+.tbl th{background:var(--bg2)}
+.pill.active{background:#dcfce7}
+
+/* calendar */
+.heads .today{background:var(--blue-soft);color:var(--blue-ink)}
+.off{background:#f2eee6}
+.off.lv{background:repeating-linear-gradient(135deg,#f2eee6 0 6px,#e8e1d4 6px 12px)}
+.minical .d.sel{background:var(--blue)}
+.c0{--c:#0f766e;--bg-c:#d9efec;--tx-c:#0b5f58}
+.c1{--c:#4f46e5;--bg-c:#e3e5fb;--tx-c:#3730a3}
+.c2{--c:#d97706;--bg-c:#fdf0d2;--tx-c:#92400e}
+.c3{--c:#e11d48;--bg-c:#fbe3e8;--tx-c:#9f1239}
+.c4{--c:#0284c7;--bg-c:#dcecfb;--tx-c:#075985}
+.c5{--c:#7c3aed;--bg-c:#eadffb;--tx-c:#5b21b6}
+button.ev{border:0;border-left:4px solid var(--c,#0f766e);border-radius:8px;background:var(--bg-c,#d9efec);color:var(--tx-c,#0b5f58);padding:4px 7px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+button.ev:hover{background:var(--bg-c,#d9efec);filter:brightness(.96)}
+.chip{background:var(--bg-c,var(--blue-soft));color:var(--tx-c,var(--blue-ink));border-left:3px solid var(--c,var(--blue));border-radius:5px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c,var(--blue));margin-right:8px}
+
+/* home */
+.home{flex:1;overflow:auto;padding:26px 30px}
+.home-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:20px}
+.home-head h1{margin:0}
+.stats.four{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 20px}
+.dgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:start}
+.dcol{display:grid;gap:20px}
+.mark.done{background:#dcfce7}
+
+/* attendance popup + session students */
+.occ{padding:22px;display:grid;gap:12px}
+.occ h2{margin:0;font-size:19px}
+.occ-head{display:flex;justify-content:space-between;align-items:center}
+.checklist.tall{max-height:320px}
+.occ .chk{display:flex;gap:10px;align-items:center;padding:10px 4px;font-size:14px;border-bottom:1px solid var(--line);cursor:pointer}
+.occ .chk:last-child{border:0}
+#sessionForm .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink);padding:4px 0}
+#sessionForm .chk input{width:auto;padding:0;border:0}
+#sessionForm .lbl{display:flex;justify-content:space-between}
+#stuBlock{display:grid;gap:8px}
+
+@media (max-width:760px){
+  .side{width:100%;height:58px;flex-direction:row;justify-content:space-around;align-items:center;gap:0;padding:4px 2px;border-right:0;border-top:1px solid var(--line);overflow:visible}
+  .logo{display:none}
+  .side button{flex:1;min-width:0;flex-direction:column;gap:2px;padding:6px 0;font-size:9.5px;justify-content:center;align-items:center;text-align:center}
+  .side svg{width:20px;height:20px}
+  .main{height:calc(100vh - 58px);height:calc(100dvh - 58px)}
+  .top{height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 14px 0;gap:10px}
+  .who div{display:none}
+  .pagetitle{font-size:16px}
+  .home{padding:16px}
+  .home-head{align-items:center}
+  .stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dgrid{grid-template-columns:minmax(0,1fr)}
+  .stat b{font-size:24px}
+}

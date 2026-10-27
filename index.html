@@ -5,33 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TutorDesk</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#16212f">
+<meta name="theme-color" content="#0f766e">
 <link rel="icon" type="image/png" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="TutorDesk">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
 <aside class="side" aria-label="Main navigation">
-  <div class="logo">T</div>
-  <button data-go="home" title="Dashboard" aria-label="Dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg></button>
-  <button data-go="cal" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
-  <button data-go="people" title="People" aria-label="People"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6M16 4.5a3.5 3.5 0 010 7M18 14c2.2.7 3.5 2.7 3.5 6"/></svg></button>
-  <button data-go="resources" title="Resources" aria-label="Resources"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></button>
-  <button data-go="gradebook" title="Gradebook" aria-label="Gradebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5zM6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg></button>
-  <button data-go="chat" title="Chat" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 01-11.5 7.2L4 20.5l1.3-4.5A8 8 0 1121 12z"/></svg></button>
-  <button data-go="reports" title="Reports" aria-label="Reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg></button>
-  <button data-go="profile" title="Profile" aria-label="Profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></button>
+  <div class="logo"><span class="mark">T</span><span>TutorDesk</span></div>
+  <button data-go="home" title="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></button>
+  <button data-go="cal" title="Calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Calendar</span></button>
+  <button data-go="people" title="People"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6M16 4.5a3.5 3.5 0 010 7M18 14c2.2.7 3.5 2.7 3.5 6"/></svg><span>People</span></button>
+  <button data-go="resources" title="Resources"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>Resources</span></button>
+  <button data-go="gradebook" title="Gradebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5zM6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg><span>Gradebook</span></button>
+  <button data-go="chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 01-11.5 7.2L4 20.5l1.3-4.5A8 8 0 1121 12z"/></svg><span>Chat</span></button>
+  <button data-go="reports" title="Reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg><span>Reports</span></button>
+  <button data-go="profile" title="Profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profile</span></button>
 </aside>
 
 <div class="main">
   <header class="top">
-    <span>Search</span>
+    <h2 class="pagetitle" id="pageTitle"></h2>
+    <span class="spacer"></span>
     <select id="orgSel" class="sel" hidden aria-label="Workspace"></select>
-    <div class="who"><b id="whoName">Your Name</b><span id="whoEmail"></span></div>
+    <div class="who"><span class="av" id="whoAv"></span><div><b id="whoName">Your Name</b><span id="whoEmail"></span></div></div>
     <button id="logoutBtn" class="logout">Log out</button>
   </header>
 
@@ -53,25 +54,28 @@
   </section>
 
   <section id="homeView" class="view">
-    <div class="dash">
-      <div class="dash-l">
-        <h1>Hello, <span id="helloName">there</span>!</h1>
-        <h2 style="color:var(--mute);font-weight:500">Overview</h2>
-        <div class="stats">
-          <div class="stat">Classes in schedule<b id="sClasses">0</b></div>
-          <div class="stat">Students enrolled<b id="sStudents">0</b></div>
-          <div class="stat">Invoiced revenue (GBP)<b>0</b></div>
-        </div>
-        <div class="panels">
-          <div class="card"><h2>Attendance</h2><div id="att"></div></div>
-          <div class="card"><h2>Online Bookings</h2><p class="empty">No bookings yet.</p></div>
-        </div>
-        <div class="panels">
+    <div class="home">
+      <div class="home-head">
+        <div><h1>Hello, <span id="helloName">there</span></h1><p class="hint" id="todayLine"></p></div>
+        <button id="homeAdd" class="add">New session</button>
+      </div>
+      <div class="stats four">
+        <div class="stat">Sessions today<b id="sToday">0</b></div>
+        <div class="stat">Sessions this week<b id="sWeek">0</b></div>
+        <div class="stat">Active students<b id="sStudents">0</b></div>
+        <div class="stat">Attendance, last 30 days<b id="sRate">&ndash;</b></div>
+      </div>
+      <div class="dgrid">
+        <div class="dcol">
+          <div class="card"><h2>Today</h2><div id="todayList"></div></div>
+          <div class="card"><h2>Recent sessions</h2><div id="att"></div></div>
           <div class="card"><h2>Popular classes</h2><div id="popular"></div></div>
+        </div>
+        <div class="dcol">
+          <div class="card"><h2>Recent activity</h2><div id="tl"></div></div>
           <div class="card"><h2>Productivity</h2><div id="prod"></div></div>
         </div>
       </div>
-      <aside class="dash-r"><h2>Timeline</h2><div id="tl"></div></aside>
     </div>
   </section>
   <section id="peopleView" class="view">
@@ -96,9 +100,19 @@
         </div>
         <div class="toolbar">
           <input id="stSearch" type="search" placeholder="Search students" aria-label="Search students">
+          <select id="stBatch" class="sel" aria-label="Filter by batch"><option value="all">All batches</option></select>
           <select id="stFilter" class="sel" aria-label="Filter students"><option value="all">All students</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
         </div>
         <div id="studentTable" class="tblwrap"></div>
+      </div>
+      <div id="studentPage" hidden></div>
+      <div id="batchesPane" hidden>
+        <div class="phead"><div><h1>Batches</h1><p class="hint">Group students together, like a class or a year group.</p></div><button id="addBatchBtn" class="add">Add batch</button></div>
+        <div id="batchTable" class="tblwrap" style="margin-top:16px"></div>
+      </div>
+      <div id="guardiansPane" hidden>
+        <div class="phead"><div><h1>Guardians</h1><p class="hint">Parents and guardians, linked to their children.</p></div><button id="addGuardianBtn" class="add">Add guardian</button></div>
+        <div id="guardianTable" class="tblwrap" style="margin-top:16px"></div>
       </div>
       <div id="teamPane" hidden>
         <div class="phead"><div><h1>Team</h1><p class="hint" id="teamHint"></p></div></div>
@@ -138,8 +152,12 @@
     <h2 id="dlgTitle">Add session</h2>
     <input type="hidden" name="id">
     <label>Title <input name="title" required maxlength="80"></label>
-    <label>Student <input name="student" list="studentList" required maxlength="80" autocomplete="off"></label>
-    <datalist id="studentList"></datalist>
+    <div id="stuBlock">
+      <span class="lbl">Students <span id="sCount" class="hint"></span></span>
+      <div class="two"><select id="sBatchPick" aria-label="Add a whole batch"></select><input id="sStuFilter" type="search" placeholder="Find a student" aria-label="Find a student"></div>
+      <div id="sStudents" class="checklist"></div>
+      <input id="sNewStudent" maxlength="80" placeholder="Or type a new student's name" aria-label="New student name">
+    </div>
     <label>Date <input name="date" type="date" required></label>
     <div class="two">
       <label>Start <input name="start" type="time" required></label>
@@ -173,6 +191,44 @@
       <button type="button" id="stCancel">Cancel</button>
       <button type="submit" class="add">Save student</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="occDialog" aria-labelledby="occTitle">
+  <div class="occ">
+    <h2 id="occTitle"></h2>
+    <p class="hint" id="occWhen"></p>
+    <div class="occ-head"><b>Attendance</b><button class="undo" id="occAll">Mark everyone present</button></div>
+    <div id="occList" class="checklist tall"></div>
+    <p id="occErr" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="occEdit">Edit session</button><button type="button" id="occClose" class="add">Done</button></div>
+  </div>
+</dialog>
+
+<dialog id="batchDialog" aria-labelledby="bTitle">
+  <form id="batchForm">
+    <h2 id="bTitle">Add batch</h2>
+    <input type="hidden" name="id">
+    <label>Batch name <input name="name" required maxlength="80" placeholder="e.g. Year 5 Maths"></label>
+    <label>Description <input name="description" maxlength="200"></label>
+    <div><span class="lbl">Students in this batch</span><div id="bStudents" class="checklist"></div></div>
+    <p id="bError" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="bDelete" class="danger" hidden>Delete</button><button type="button" id="bCancel">Cancel</button><button type="submit" class="add">Save batch</button></div>
+  </form>
+</dialog>
+
+<dialog id="guardianDialog" aria-labelledby="gTitle">
+  <form id="guardianForm">
+    <h2 id="gTitle">Add guardian</h2>
+    <input type="hidden" name="id">
+    <label>Name <input name="name" required maxlength="80"></label>
+    <label>Relationship <input name="relationship" list="relList" maxlength="40" placeholder="e.g. Mother"></label>
+    <datalist id="relList"><option value="Mother"><option value="Father"><option value="Guardian"><option value="Other"></datalist>
+    <label>Email <input name="email" type="email" maxlength="120"></label>
+    <label>Phone <input name="phone" type="tel" maxlength="30"></label>
+    <div><span class="lbl">Their children</span><div id="gStudents" class="checklist"></div></div>
+    <p id="gError" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="gDelete" class="danger" hidden>Delete</button><button type="button" id="gCancel">Cancel</button><button type="submit" class="add">Save guardian</button></div>
   </form>
 </dialog>
 
