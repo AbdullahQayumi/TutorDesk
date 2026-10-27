@@ -248,7 +248,7 @@ function renderDash() {
   $("tl").innerHTML = tl.length ? tl.map((t) => `<div class="tl"><i></i><p>Attendance for <b>${esc(t.title)}</b> on ${fmtDay(parseYmd(t.occurrence))}: ${t.count} of ${t.total} present<em>${new Date(t.at).toLocaleString("en-GB")}</em></p></div>`).join("")
     : '<p class="empty">Activity will appear here.</p>';
   const st = stats();
-  $("sToday").textContent = today.length; $("sWeek").textContent = st.week; $("sStudents").textContent = st.students;
+  $("sToday").textContent = today.length; $("sWeek").textContent = st.week; $("sActive").textContent = st.students;
   $("sRate").textContent = st.rate == null ? "–" : st.rate + "%";
   renderInsights();
 }

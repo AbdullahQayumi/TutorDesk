@@ -381,3 +381,7 @@ button.ev:hover{background:var(--bg-c,#d9efec);filter:brightness(.96)}
   .dgrid{grid-template-columns:minmax(0,1fr)}
   .stat b{font-size:24px}
 }
+
+/* polish */
+input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
+@media (max-width:760px){ .side button{font-size:9px;letter-spacing:-.01em} }
