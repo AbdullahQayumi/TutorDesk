@@ -16,6 +16,7 @@ let org = null, myRole = null, myId = null; // the workspace being viewed, and w
 let orgs = [], members = [], invites = [];
 let settings = {}, leaves = []; // settings: userId -> { workingHours, takesClasses }
 let batches = [], batchLinks = [], guardians = [], guardianLinks = [];
+let invoices = [], items = [], payments = []; // money: owners and admins only
 
 const fail = (error) => { if (error) throw new Error(error.message); };
 const studentName = (id) => students.find((x) => x.id === id)?.name;
@@ -30,26 +31,26 @@ function reindexAtt() {
 }
 
 // Database column names <-> app field names (Postgres returns time as "18:00:00")
-const fromRow = (r) => ({ id: r.id, title: r.title, staffId: r.tutor_id, studentIds: [], date: r.session_date,
+const fromRow = (r) => ({ id: r.id, title: r.title, staffId: r.tutor_id, studentIds: [], price: r.price == null ? null : Number(r.price), date: r.session_date,
   dow: parseYmd(r.session_date).getDay(), start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5), repeat: r.recurrence });
 const labelOf = (ids) => {
   const names = ids.map(studentName).filter(Boolean);
   return (!names.length ? "No students" : names.length <= 2 ? names.join(", ") : `${names[0]} +${names.length - 1}`).slice(0, 80);
 };
-const toRow = (s, ids) => ({ title: s.title, student: labelOf(ids), tutor_id: s.staffId, session_date: s.date,
+const toRow = (s, ids) => ({ title: s.title, student: labelOf(ids), tutor_id: s.staffId, price: s.price === undefined ? undefined : s.price === "" || s.price == null ? null : Number(s.price), session_date: s.date,
   start_time: s.start, end_time: s.end, recurrence: s.repeat });
 
 export async function loadAll(userId, preferredOrg) {
   myId = userId;
   await supabase.rpc("accept_invites"); // joins any team this email was invited to (errors are ignored)
-  const mine = await supabase.from("memberships").select("role, organisations(id, name, type)").eq("user_id", userId).order("created_at");
+  const mine = await supabase.from("memberships").select("role, organisations(id, name, type, currency, billing_details)").eq("user_id", userId).order("created_at");
   fail(mine.error);
   orgs = mine.data.map((m) => ({ ...m.organisations, role: m.role }));
   if (!orgs.length) throw new Error("No workspace found for this account.");
   org = orgs.find((o) => o.id === preferredOrg) || orgs[0];
   myRole = org.role;
   const q = (t, cols = "*") => supabase.from(t).select(cols).eq("org_id", org.id);
-  const [a, b, c, d, e, f, g, bt, bl, gd, gl, ss] = await Promise.all([
+  const [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm] = await Promise.all([
     q("sessions"),
     q("attendance", "session_id, student_id, occurrence, marked_at").order("marked_at", { ascending: false }),
     q("students"),
@@ -62,8 +63,11 @@ export async function loadAll(userId, preferredOrg) {
     q("guardians"),
     q("student_guardians", "student_id, guardian_id"),
     q("session_students", "session_id, student_id"),
+    isAdmin() ? q("invoices") : { data: [], error: null },
+    isAdmin() ? q("invoice_items") : { data: [], error: null },
+    isAdmin() ? q("payments") : { data: [], error: null },
   ]);
-  for (const r of [a, b, c, d, e, f, g, bt, bl, gd, gl, ss]) fail(r.error);
+  for (const r of [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm]) fail(r.error);
   members = d.data.map((m) => ({ userId: m.user_id, role: m.role, email: m.profiles?.email || "", phone: m.profiles?.phone || "",
     name: m.profiles?.full_name || m.profiles?.email || "Unnamed" }));
   invites = e.data;
@@ -75,11 +79,13 @@ export async function loadAll(userId, preferredOrg) {
   for (const l of ss.data) { if (!roster.has(l.session_id)) roster.set(l.session_id, []); roster.get(l.session_id).push(l.student_id); }
   sessions = a.data.map((r) => ({ ...fromRow(r), studentIds: roster.get(r.id) || [] }));
   attendance = b.data;
+  invoices = iv.data; items = it.data; payments = pm.data;
   reindexAtt();
 }
 export function clearAll() {
   sessions = []; attendance = []; attIdx = new Map(); students = []; org = null; orgs = []; members = []; invites = [];
   settings = {}; leaves = []; batches = []; batchLinks = []; guardians = []; guardianLinks = [];
+  invoices = []; items = []; payments = [];
 }
 
 export async function getProfile(userId) {
@@ -420,4 +426,105 @@ export function studentHistory(studentId) {
   past.sort((a, b) => b.date.localeCompare(a.date) || b.start.localeCompare(a.start));
   upcoming.sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
   return { past, upcoming };
+}
+
+// ---------- invoices & revenue (owners and admins) ----------
+const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+export const money = (n) => new Intl.NumberFormat("en-GB", { style: "currency", currency: org?.currency || "GBP" }).format(n || 0);
+
+export async function saveBilling({ currency, billingDetails }) {
+  const { data, error } = await supabase.from("organisations").update({ currency, billing_details: billingDetails || null }).eq("id", org.id).select().single();
+  fail(error);
+  org.currency = data.currency; org.billing_details = data.billing_details;
+}
+
+// paid / part paid / overdue / unpaid are worked out from the payments, never stored
+function invoiceView(inv) {
+  const paid = r2(payments.filter((p) => p.invoice_id === inv.id).reduce((t, p) => t + Number(p.amount), 0));
+  const total = Number(inv.total), balance = r2(total - paid);
+  const state = inv.status === "void" ? "void" : balance <= 0 ? "paid" : inv.due_date < ymd(new Date()) ? "overdue" : paid > 0 ? "partial" : "open";
+  return { ...inv, total, paid, balance, state };
+}
+export const listInvoices = () => invoices.map(invoiceView).sort((a, b) => b.issue_date.localeCompare(a.issue_date) || b.number.localeCompare(a.number));
+export const studentInvoices = (studentId) => listInvoices().filter((i) => i.student_id === studentId);
+export function getInvoice(id) {
+  const inv = invoices.find((i) => i.id === id);
+  return inv && { ...invoiceView(inv), items: items.filter((l) => l.invoice_id === id), payments: payments.filter((p) => p.invoice_id === id).sort((a, b) => a.paid_on.localeCompare(b.paid_on)) };
+}
+export function invoiceTotals() {
+  const month = ymd(new Date()).slice(0, 7);
+  let outstanding = 0, overdue = 0, invoicedThisMonth = 0, collectedThisMonth = 0;
+  for (const v of invoices.map(invoiceView)) {
+    if (v.state === "void") continue;
+    if (v.issue_date.startsWith(month)) invoicedThisMonth += v.total;
+    if (v.balance > 0) { outstanding += v.balance; if (v.state === "overdue") overdue += v.balance; }
+  }
+  for (const p of payments) if (p.paid_on.startsWith(month)) collectedThisMonth += Number(p.amount);
+  return { outstanding: r2(outstanding), overdue: r2(overdue), invoicedThisMonth: r2(invoicedThisMonth), collectedThisMonth: r2(collectedThisMonth) };
+}
+
+// Sessions a student can be billed for in a period: attended (or all scheduled), priced, and not billed before.
+export function billableLines(studentId, from, to, mode) {
+  const billed = new Set(items.filter((i) => i.session_id).map((i) => `${i.student_id}|${i.session_id}|${i.occurrence}`));
+  const lines = [], d = parseYmd(from), end = parseYmd(to);
+  let unpriced = 0;
+  for (let n = 0; d <= end && n < 400; n++, d.setDate(d.getDate() + 1)) {
+    for (const o of sessionsOn(d)) {
+      if (!o.studentIds.includes(studentId) || billed.has(`${studentId}|${o.id}|${o.occurrence}`)) continue;
+      if (mode === "attended" && !o.present.includes(studentId)) continue;
+      if (o.price == null) { unpriced++; continue; }
+      const day = parseYmd(o.occurrence).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      lines.push({ sessionId: o.id, occurrence: o.occurrence, description: `${o.title} · ${day} · ${o.start}–${o.end}`, quantity: 1, unitPrice: o.price });
+    }
+  }
+  return { lines, unpriced };
+}
+
+const nextNumber = () => {
+  const max = invoices.reduce((m, i) => Math.max(m, parseInt(String(i.number).replace(/\D/g, ""), 10) || 0), 0);
+  return "INV-" + String(max + 1).padStart(4, "0");
+};
+
+export async function createInvoice({ studentId, issueDate, dueDate, periodStart, periodEnd, notes, lines }) {
+  const st = getStudent(studentId);
+  if (!st) throw new Error("Choose a student.");
+  if (dueDate < issueDate) throw new Error("The due date can't be before the issue date.");
+  const clean = lines.filter((l) => String(l.description).trim()).map((l) => ({ ...l, quantity: Number(l.quantity) || 1, unitPrice: r2(l.unitPrice) }));
+  if (!clean.length) throw new Error("Add at least one line to the invoice.");
+  const total = r2(clean.reduce((t, l) => t + r2(l.quantity * l.unitPrice), 0));
+  if (total <= 0) throw new Error("The invoice total must be more than zero.");
+  const ins = await supabase.from("invoices").insert({ org_id: org.id, student_id: st.id, student_name: st.name, number: nextNumber(),
+    issue_date: issueDate, due_date: dueDate, period_start: periodStart || null, period_end: periodEnd || null, notes: notes || null, total }).select().single();
+  fail(ins.error);
+  const rows = clean.map((l) => ({ invoice_id: ins.data.id, org_id: org.id, student_id: st.id, session_id: l.sessionId || null, occurrence: l.occurrence || null,
+    description: String(l.description).trim().slice(0, 200), quantity: l.quantity, unit_price: l.unitPrice, amount: r2(l.quantity * l.unitPrice) }));
+  const it2 = await supabase.from("invoice_items").insert(rows).select();
+  if (it2.error) { await supabase.from("invoices").delete().eq("id", ins.data.id); throw new Error(it2.error.message); } // don't leave an empty invoice behind
+  invoices.push(ins.data); items.push(...it2.data);
+  return ins.data;
+}
+
+export async function addPayment(invoiceId, { amount, paidOn, method, note }) {
+  const v = getInvoice(invoiceId), amt = r2(amount);
+  if (!v || v.state === "void") throw new Error("This invoice can't take payments.");
+  if (!(amt > 0)) throw new Error("Enter an amount above zero.");
+  if (amt > v.balance + 0.004) throw new Error(`That is more than the balance due (${money(v.balance)}).`);
+  const { data, error } = await supabase.from("payments").insert({ org_id: org.id, invoice_id: invoiceId, amount: amt, paid_on: paidOn, method: method || null, note: note || null }).select().single();
+  fail(error);
+  payments.push(data);
+}
+export async function deletePayment(id) {
+  const { error } = await supabase.from("payments").delete().eq("id", id);
+  fail(error);
+  payments = payments.filter((p) => p.id !== id);
+}
+// Voiding keeps the invoice for your records but frees its sessions so they can be billed again.
+export async function voidInvoice(id) {
+  if (payments.some((p) => p.invoice_id === id)) throw new Error("Remove this invoice's payments before voiding it.");
+  let r = await supabase.from("invoices").update({ status: "void" }).eq("id", id);
+  fail(r.error);
+  r = await supabase.from("invoice_items").update({ session_id: null, occurrence: null }).eq("invoice_id", id);
+  fail(r.error);
+  invoices.find((i) => i.id === id).status = "void";
+  items.forEach((l) => { if (l.invoice_id === id) { l.session_id = null; l.occurrence = null; } });
 }

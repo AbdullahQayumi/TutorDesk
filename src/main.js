@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, invoiceTotals, listInvoices, getInvoice, billableLines, createInvoice, addPayment, deletePayment, voidInvoice, saveBilling, money, studentInvoices, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -160,7 +160,7 @@ function openDialog({ id, date, start } = {}) {
   form.reset();
   sessionStudentsInit(s ? s.studentIds : []);
   const v = {
-    id: s?.id ?? "", title: s?.title ?? "",
+    id: s?.id ?? "", title: s?.title ?? "", price: s?.price ?? "",
     date: s?.date ?? date ?? ymd(new Date()), start: s?.start ?? startH,
     end: s?.end ?? (parseInt(startH, 10) >= 23 ? "23:59" : hourStr(parseInt(startH, 10) + 1)), repeat: s?.repeat ?? "none",
   };
@@ -169,6 +169,7 @@ function openDialog({ id, date, start } = {}) {
   v.staffId = s?.staffId ?? getMe().id;
   for (const [k, val] of Object.entries(v)) form.elements[k].value = val;
   $("staffWrap").hidden = !(getOrg().type === "business" && isAdmin());
+  $("priceWrap").hidden = !isAdmin();
   form.querySelectorAll("input,select").forEach((i) => { i.disabled = !editable; });
   form.querySelector("button[type=submit]").hidden = !editable;
   if (!editable) { $("dlgDelete").hidden = true; $("dlgError").textContent = "This session belongs to another staff member, so you can only view it."; }
@@ -180,6 +181,7 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(form));
   f.title = f.title.trim();
+  if (!isAdmin()) delete f.price; // only owners and admins set prices
   if (f.end <= f.start) { $("dlgError").textContent = "End time must be after the start time."; return; }
   if (!f.id) delete f.id;
   try {
@@ -250,6 +252,12 @@ function renderDash() {
   const st = stats();
   $("sToday").textContent = today.length; $("sWeek").textContent = st.week; $("sActive").textContent = st.students;
   $("sRate").textContent = st.rate == null ? "–" : st.rate + "%";
+  $("moneyStats").hidden = !isAdmin();
+  if (isAdmin()) {
+    const t = invoiceTotals();
+    $("sColl").textContent = money(t.collectedThisMonth); $("sOut").textContent = money(t.outstanding);
+    $("sOver").textContent = t.overdue > 0 ? `${money(t.overdue)} overdue` : "Nothing overdue";
+  }
   renderInsights();
 }
 
@@ -299,9 +307,9 @@ $("occClose").onclick = () => occDlg.close();
 occDlg.addEventListener("click", (e) => { if (e.target === occDlg) occDlg.close(); });
 
 // ---------- navigation ----------
-const SECTIONS = ["home", "cal", "people", "resources", "gradebook", "chat", "reports", "profile"];
-const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView" };
-const TITLES = { home: "Home", cal: "Calendar", people: "People", resources: "Resources", gradebook: "Gradebook", chat: "Chat", reports: "Reports", profile: "Profile" };
+const SECTIONS = ["home", "cal", "people", "invoices", "resources", "gradebook", "chat", "reports", "profile"];
+const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView", invoices: "invoicesView" };
+const TITLES = { home: "Home", cal: "Calendar", people: "People", invoices: "Invoices", resources: "Resources", gradebook: "Gradebook", chat: "Chat", reports: "Reports", profile: "Profile" };
 const SOON = {
   resources: ["Resources", "Upload and share files and courses with your students."],
   gradebook: ["Gradebook", "Grade your students and track their progress over time."],
@@ -309,6 +317,7 @@ const SOON = {
   reports: ["Reports", "Staff and student dashboards."],
 };
 function show(which) {
+  if (which === "invoices" && !isAdmin()) which = "home"; // money is for owners and admins
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("on"));
   $(REAL[which] || "soonView").classList.add("on");
   if (!REAL[which]) { $("soonTitle").textContent = SOON[which][0]; $("soonText").textContent = SOON[which][1] + " Coming in a later phase."; }
@@ -317,6 +326,7 @@ function show(which) {
   $("pageTitle").textContent = TITLES[which];
   if (which === "people") renderPeople();
   if (which === "profile") renderProfile();
+  if (which === "invoices") renderInvoices();
 }
 document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => { if (b.dataset.go === "profile") profileId = null; show(b.dataset.go); }));
 
@@ -415,13 +425,15 @@ function renderStudentPage() {
     <h2 class="sect">Guardians <button class="undo" id="spAddGuardian">Add guardian</button></h2>
     ${gs.length ? `<div class="card">${gs.map((g) => `<div class="row"><div>${esc(g.name)}${g.relationship ? ` (${esc(g.relationship)})` : ""}<br><span>${[g.email, g.phone].filter(Boolean).map(esc).join(" · ") || "No contact details"}</span></div></div>`).join("")}</div>` : '<p class="hint">No guardians linked yet.</p>'}
     <h2 class="sect">Batches</h2>${bs.length ? bs.map((b) => `<span class="pill2">${esc(b.name)}</span>`).join("") : '<p class="hint">Not in any batch.</p>'}
-    <h2 class="sect">Upcoming sessions</h2>${upcoming.length ? `<div class="card">${upcoming.slice(0, 5).map((r) => `<div class="row"><div>${esc(r.title)}<br><span>${fmtD(r.date)} · ${fmtT(r.start)} - ${fmtT(r.end)}${staffTxt(r)}</span></div></div>`).join("")}</div>` : '<p class="hint">Nothing scheduled in the next four weeks.</p>'}
+    ${invSection(s)}<h2 class="sect">Upcoming sessions</h2>${upcoming.length ? `<div class="card">${upcoming.slice(0, 5).map((r) => `<div class="row"><div>${esc(r.title)}<br><span>${fmtD(r.date)} · ${fmtT(r.start)} - ${fmtT(r.end)}${staffTxt(r)}</span></div></div>`).join("")}</div>` : '<p class="hint">Nothing scheduled in the next four weeks.</p>'}
     <h2 class="sect">Attendance history</h2>${past.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Class</th>${biz ? "<th>Staff</th>" : ""}<th>Attendance</th></tr></thead><tbody>${past.slice(0, 100).map((r) => `<tr style="cursor:default"><td>${fmtD(r.date)}</td><td>${fmtT(r.start)} - ${fmtT(r.end)}</td><td>${esc(r.title)}</td>${biz ? `<td>${esc(staffName(r.staffId))}</td>` : ""}<td><span class="pill ${r.marked ? "active" : "inactive"}">${r.marked ? "Marked" : "Not marked"}</span></td></tr>`).join("")}</tbody></table></div>` : '<p class="hint">No past sessions yet.</p>'}`;
 }
 $("studentPage").addEventListener("click", (e) => {
   if (e.target.closest("#spBack")) { studentOpenId = null; renderPeople(); }
   else if (e.target.closest("#spEdit")) openStudent(studentOpenId);
   else if (e.target.closest("#spAddGuardian")) openGuardian(null, studentOpenId);
+  else if (e.target.closest("#spNewInv")) openNewInvoice(studentOpenId);
+  else if (e.target.closest("[data-inv]")) openInvoice(e.target.closest("[data-inv]").dataset.inv);
 });
 
 // batches
@@ -543,6 +555,163 @@ $("teamBody").addEventListener("click", async (e) => {
   } catch (err) { teamErr(err.message); }
 });
 
+// ---------- invoices ----------
+const STATE = { open: ["Unpaid", "inactive"], partial: ["Part paid", "inactive"], overdue: ["Overdue", "bad"], paid: ["Paid", "active"], void: ["Void", "inactive"] };
+const pillFor = (st) => `<span class="pill ${STATE[st][1]}">${STATE[st][0]}</span>`;
+const dShort = (k) => parseYmd(k).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const afterMoney = () => { renderInvoices(); renderDash(); if (studentOpenId) renderPeople(); };
+
+const invSection = (st) => {
+  if (!isAdmin()) return "";
+  const list = studentInvoices(st.id);
+  return `<h2 class="sect">Invoices <button class="undo" id="spNewInv">New invoice</button></h2>` + (list.length
+    ? `<div class="card">${list.map((i) => `<div class="row" data-inv="${i.id}" style="cursor:pointer"><div>${esc(i.number)} · ${dShort(i.issue_date)}<br><span>${money(i.total)}${i.state !== "void" && i.balance > 0 ? " · balance " + money(i.balance) : ""}</span></div>${pillFor(i.state)}</div>`).join("")}</div>`
+    : '<p class="hint">No invoices yet.</p>');
+};
+
+function renderInvoices() {
+  const t = invoiceTotals();
+  $("iOut").textContent = money(t.outstanding); $("iOver").textContent = money(t.overdue);
+  $("iMonth").textContent = money(t.invoicedThisMonth); $("iColl").textContent = money(t.collectedThisMonth);
+  $("invSettingsBtn").hidden = getMe().role !== "owner";
+  const keep = $("invStudent").value || "all";
+  $("invStudent").innerHTML = '<option value="all">All students</option>' + listStudents().map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  $("invStudent").value = keep;
+  const sf = $("invStudent").value || "all", f = $("invFilter").value;
+  const all = listInvoices();
+  const rows = all.filter((i) => (sf === "all" || i.student_id === sf) && (f === "all" || (f === "unpaid" ? ["open", "partial", "overdue"].includes(i.state) : i.state === f)));
+  $("invTable").innerHTML = rows.length
+    ? `<table class="tbl"><thead><tr><th>Number</th><th>Student</th><th>Issued</th><th>Due</th><th>Total</th><th>Balance</th><th>Status</th></tr></thead><tbody>${rows.map((i) =>
+        `<tr data-id="${i.id}" tabindex="0"><td>${esc(i.number)}</td><td>${esc(i.student_name)}</td><td>${dShort(i.issue_date)}</td><td>${dShort(i.due_date)}</td><td>${money(i.total)}</td><td>${i.state === "void" ? "–" : money(i.balance)}</td><td>${pillFor(i.state)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="empty">${all.length ? "No invoices match." : "No invoices yet. Create one to bill a student for their sessions."}</p>`;
+}
+$("invFilter").onchange = renderInvoices;
+$("invStudent").onchange = renderInvoices;
+const openInvRow = (e) => { if (e.type === "keydown" && e.key !== "Enter") return; const r = e.target.closest("tr[data-id]"); if (r) openInvoice(r.dataset.id); };
+$("invTable").addEventListener("click", openInvRow);
+$("invTable").addEventListener("keydown", openInvRow);
+
+// new invoice
+const inDlg = $("invNewDialog"), inForm = $("invNewForm");
+let newLines = []; // { sessionId?, occurrence?, description, quantity, unitPrice, include, custom? }
+const newTotal = () => { $("invTotal").textContent = money(newLines.filter((l) => l.include).reduce((t, l) => t + l.quantity * Number(l.unitPrice || 0), 0)); };
+function renderNewLines() {
+  $("invLines").innerHTML = newLines.length
+    ? newLines.map((l, i) => `<div class="lrow"><label class="chk"><input type="checkbox" data-line="${i}" ${l.include ? "checked" : ""}><span>${esc(l.description)}</span></label><input type="number" min="0" step="0.01" data-price="${i}" value="${l.unitPrice}" aria-label="Price">${l.custom ? `<button type="button" class="undo" data-rmline="${i}" aria-label="Remove line">&times;</button>` : ""}</div>`).join("")
+    : '<p class="hint">Find sessions to bill, or add a custom line.</p>';
+  newTotal();
+}
+function openNewInvoice(studentId) {
+  inForm.reset();
+  $("inStudent").innerHTML = '<option value="">Choose a student</option>' + listStudents().map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  const now = new Date(), f = inForm.elements;
+  f.student.value = studentId || "";
+  f.from.value = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); f.to.value = ymd(now);
+  f.issue.value = ymd(now); f.due.value = ymd(addDays(now, 14));
+  newLines = []; renderNewLines(); $("invNewErr").textContent = "";
+  inDlg.showModal();
+}
+$("newInvBtn").onclick = () => openNewInvoice();
+$("invFind").onclick = () => {
+  const f = inForm.elements, err = $("invNewErr");
+  if (!f.student.value) { err.textContent = "Choose a student first."; return; }
+  const { lines, unpriced } = billableLines(f.student.value, f.from.value, f.to.value, f.mode.value);
+  newLines = [...lines.map((l) => ({ ...l, include: true })), ...newLines.filter((l) => l.custom)];
+  err.textContent = unpriced ? `${unpriced} session${unpriced > 1 ? "s have" : " has"} no price, so ${unpriced > 1 ? "they were" : "it was"} left out. Set a price on the session to bill it.`
+    : !lines.length ? "No billable sessions found in this period. Anything already invoiced is left out. You can still add a custom line." : "";
+  renderNewLines();
+};
+$("custAdd").onclick = () => {
+  const d = $("custDesc").value.trim(), a = Number($("custAmt").value);
+  if (!d || !(a > 0)) { $("invNewErr").textContent = "A custom line needs a description and an amount."; return; }
+  newLines.push({ description: d, quantity: 1, unitPrice: a, include: true, custom: true });
+  $("custDesc").value = ""; $("custAmt").value = ""; $("invNewErr").textContent = ""; renderNewLines();
+};
+$("invLines").addEventListener("change", (e) => { const c = e.target.closest("[data-line]"); if (c) { newLines[c.dataset.line].include = c.checked; newTotal(); } });
+$("invLines").addEventListener("input", (e) => { const p = e.target.closest("[data-price]"); if (p) { newLines[p.dataset.price].unitPrice = p.value; newTotal(); } });
+$("invLines").addEventListener("click", (e) => { const r = e.target.closest("[data-rmline]"); if (r) { newLines.splice(Number(r.dataset.rmline), 1); renderNewLines(); } });
+inForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = inForm.elements;
+  try {
+    const inv = await createInvoice({ studentId: f.student.value, issueDate: f.issue.value, dueDate: f.due.value, periodStart: f.from.value, periodEnd: f.to.value, notes: f.notes.value.trim(), lines: newLines.filter((l) => l.include) });
+    inDlg.close(); afterMoney(); openInvoice(inv.id);
+  } catch (err) { $("invNewErr").textContent = err.message; }
+});
+$("invNewCancel").onclick = () => inDlg.close();
+inDlg.addEventListener("click", (e) => { if (e.target === inDlg) inDlg.close(); });
+
+// invoice detail: payments, void, print
+const invDlg = $("invDialog");
+let curInv = null;
+function openInvoice(id) { curInv = id; renderInvoiceDetail(); invDlg.showModal(); }
+function renderInvoiceDetail() {
+  const v = getInvoice(curInv);
+  if (!v) { invDlg.close(); return; }
+  const canPay = v.state !== "void" && v.balance > 0.004;
+  $("invDetail").innerHTML = `<div class="occ">
+    <h2>${esc(v.number)} ${pillFor(v.state)}</h2>
+    <p class="hint">${esc(v.student_name)} · Issued ${dShort(v.issue_date)} · Due ${dShort(v.due_date)}${v.period_start ? ` · Covers ${dShort(v.period_start)} – ${dShort(v.period_end)}` : ""}</p>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Description</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${v.items.map((l) => `<tr style="cursor:default"><td style="white-space:normal">${esc(l.description)}</td><td>${l.quantity}</td><td>${money(l.unit_price)}</td><td>${money(l.amount)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="totals"><span>Total</span><b>${money(v.total)}</b><span>Paid</span><b>${money(v.paid)}</b><span>Balance due</span><b>${money(v.balance)}</b></div>
+    ${v.payments.length ? `<b>Payments</b><div class="card">${v.payments.map((p) => `<div class="row"><div>${money(p.amount)} · ${dShort(p.paid_on)}${p.method ? " · " + esc(p.method) : ""}${p.note ? `<br><span>${esc(p.note)}</span>` : ""}</div><button class="undo" data-delpay="${p.id}">Remove</button></div>`).join("")}</div>` : ""}
+    ${canPay ? `<form id="payForm" class="payform"><input name="amount" type="number" min="0.01" step="0.01" required value="${v.balance.toFixed(2)}" aria-label="Amount paid"><input name="paidOn" type="date" required value="${ymd(new Date())}" aria-label="Date paid"><select name="method" aria-label="Method"><option>Bank transfer</option><option>Cash</option><option>Card</option><option>Other</option></select><input name="note" placeholder="Note (optional)" maxlength="200" aria-label="Note"><button class="add" type="submit">Record payment</button></form>` : ""}
+    ${v.notes ? `<p class="hint">Notes: ${esc(v.notes)}</p>` : ""}
+    <p id="invErr" class="err" role="alert"></p>
+    <div class="actions">${v.state !== "void" && !v.payments.length ? '<button type="button" id="invVoid" class="danger">Void invoice</button>' : ""}<button type="button" id="invPrint">Print / save as PDF</button><button type="button" id="invClose" class="add">Done</button></div>
+  </div>`;
+}
+$("invDetail").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  try { await addPayment(curInv, { amount: f.amount, paidOn: f.paidOn, method: f.method, note: f.note.trim() }); renderInvoiceDetail(); afterMoney(); }
+  catch (err) { $("invErr").textContent = err.message; }
+});
+$("invDetail").addEventListener("click", async (e) => {
+  const t = (sel) => e.target.closest(sel);
+  try {
+    if (t("#invClose")) return invDlg.close();
+    if (t("#invPrint")) return printInvoice(curInv);
+    if (t("[data-delpay]")) { if (!confirm("Remove this payment?")) return; await deletePayment(t("[data-delpay]").dataset.delpay); }
+    else if (t("#invVoid")) { if (!confirm("Void this invoice? Its sessions can then be billed again.")) return; await voidInvoice(curInv); }
+    else return;
+    renderInvoiceDetail(); afterMoney();
+  } catch (err) { const el = $("invErr"); if (el) el.textContent = err.message; }
+});
+invDlg.addEventListener("click", (e) => { if (e.target === invDlg) invDlg.close(); });
+
+// Print / save as PDF: the browser's print dialog lets you choose "Save as PDF".
+function printInvoice(id) {
+  const v = getInvoice(id), o = getOrg(), gs = studentGuardians(v.student_id);
+  const bill = [esc(v.student_name), ...gs.map((g) => esc(g.name) + (g.email ? " · " + esc(g.email) : ""))].join("<br>");
+  $("printArea").innerHTML = `<div class="pi">
+    <div class="pi-top"><div><h1>${esc(o.name)}</h1></div><div class="r"><h2>INVOICE</h2><div>${esc(v.number)}</div><div>Issued ${dShort(v.issue_date)}</div><div>Due ${dShort(v.due_date)}</div></div></div>
+    <p><b>Bill to</b><br>${bill}</p>
+    <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${v.items.map((l) => `<tr><td>${esc(l.description)}</td><td class="r">${l.quantity}</td><td class="r">${money(l.unit_price)}</td><td class="r">${money(l.amount)}</td></tr>`).join("")}</tbody></table>
+    <table class="pi-tot"><tr><td>Total</td><td class="r">${money(v.total)}</td></tr><tr><td>Paid</td><td class="r">${money(v.paid)}</td></tr><tr><td><b>Balance due</b></td><td class="r"><b>${money(v.balance)}</b></td></tr></table>
+    ${v.state === "paid" ? '<p class="pi-paid">PAID IN FULL</p>' : ""}
+    ${v.notes ? `<p>${esc(v.notes)}</p>` : ""}
+    ${o.billing_details ? `<p><b>How to pay</b></p><div class="pre">${esc(o.billing_details)}</div>` : ""}
+  </div>`;
+  document.body.classList.add("printing");
+  const done = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  window.print();
+}
+
+// billing settings (owner)
+const isDlg = $("invSettingsDialog"), isForm = $("invSettingsForm");
+$("invSettingsBtn").onclick = () => {
+  isForm.elements.currency.value = getOrg().currency || "GBP"; isForm.elements.details.value = getOrg().billing_details || "";
+  $("invSetErr").textContent = ""; isDlg.showModal();
+};
+isForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try { await saveBilling({ currency: isForm.elements.currency.value, billingDetails: isForm.elements.details.value.trim() }); } catch (err) { $("invSetErr").textContent = err.message; return; }
+  isDlg.close(); renderInvoices(); renderDash();
+});
+$("invSetCancel").onclick = () => isDlg.close();
+
 // ---------- workspace switcher, staff filter, header ----------
 let authUser = null;
 const savedOrg = () => { try { return localStorage.getItem("tutordesk.org"); } catch { return null; } };
@@ -558,6 +727,7 @@ function applyOrgUI() {
   $("orgSel").hidden = list.length < 2;
   $("orgSel").innerHTML = list.map((x) => `<option value="${x.id}">${esc(x.name)} (${x.type})</option>`).join("");
   $("orgSel").value = o.id;
+  document.querySelector(".side [data-go=invoices]").hidden = !isAdmin();
 }
 $("staffSel").onchange = (e) => { staffFilter = e.target.value; renderWeek(); };
 $("orgSel").onchange = async (e) => {

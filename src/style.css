@@ -385,3 +385,49 @@ button.ev:hover{background:var(--bg-c,#d9efec);filter:brightness(.96)}
 /* polish */
 input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
 @media (max-width:760px){ .side button{font-size:9px;letter-spacing:-.01em} }
+
+/* ---- Invoices ---- */
+.pill.bad{background:#fee4e2;color:#b42318}
+.stats.two{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 20px}
+.stats.two .stat{grid-column:span 2}
+.stat small{display:block;margin-top:4px;font-size:12px;color:#b42318}
+.btns{display:flex;gap:10px;align-items:center}
+#invNewDialog{width:min(580px,94vw)} #invDialog{width:min(640px,94vw)}
+#invNewForm,#invSettingsForm{padding:20px;display:grid;gap:12px}
+#invNewForm label,#invSettingsForm label{display:grid;gap:4px;font-size:11px;color:var(--mute)}
+#invNewForm input:not([type=checkbox]),#invNewForm select,#invNewForm textarea,#invSettingsForm select,#invSettingsForm textarea,.payform input,.payform select{font:inherit;font-size:13px;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+#invNewForm .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
+#invNewForm .chk input{width:auto;padding:0;border:0}
+.lrow{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.lrow .chk{flex:1;min-width:0}
+.lrow input[type=number]{width:96px}
+.invtotal{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.invtotal b{font-size:20px}
+.totals{display:grid;grid-template-columns:1fr auto;gap:4px 28px;justify-self:end;min-width:230px;font-size:14px}
+.totals b{text-align:right}
+.payform{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.payform button{grid-column:1/-1}
+@media (max-width:760px){
+  .stats.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats.two .stat{grid-column:span 1}
+  .side [data-go=resources],.side [data-go=gradebook],.side [data-go=chat],.side [data-go=reports]{display:none}
+  #invNewForm input,#invNewForm select,#invNewForm textarea,#invSettingsForm select,#invSettingsForm textarea,.payform input,.payform select{font-size:16px}
+}
+
+/* printed invoice */
+#printArea{display:none}
+.pi{font:14px/1.5 "DM Sans",Arial,sans-serif;color:#111}
+.pi h1{font-size:24px;margin:0}.pi h2{font-size:18px;margin:0 0 4px;letter-spacing:.08em}
+.pi-top{display:flex;justify-content:space-between;gap:24px;margin-bottom:24px}
+.pi .r{text-align:right}
+.pi table{width:100%;border-collapse:collapse;margin:16px 0}
+.pi th,.pi td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}
+.pi th.r,.pi td.r{text-align:right}
+.pi-tot{width:260px!important;margin-left:auto!important}
+.pi .pre{white-space:pre-wrap}
+.pi-paid{font-weight:700;color:#15803d;letter-spacing:.1em}
+@media print{
+  body.printing > :not(#printArea){display:none!important}
+  body.printing #printArea{display:block;padding:8px}
+  @page{margin:16mm}
+}
