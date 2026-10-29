@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, invoiceTotals, listInvoices, getInvoice, billableLines, createInvoice, addPayment, deletePayment, voidInvoice, saveBilling, money, studentInvoices, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, invoiceTotals, listInvoices, getInvoice, billableLines, createInvoice, addPayment, deletePayment, voidInvoice, saveBilling, money, studentInvoices, staffReport, studentReport, revenueReport, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -308,16 +308,15 @@ occDlg.addEventListener("click", (e) => { if (e.target === occDlg) occDlg.close(
 
 // ---------- navigation ----------
 const SECTIONS = ["home", "cal", "people", "invoices", "resources", "gradebook", "chat", "reports", "profile"];
-const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView", invoices: "invoicesView" };
+const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView", invoices: "invoicesView", reports: "reportsView" };
 const TITLES = { home: "Home", cal: "Calendar", people: "People", invoices: "Invoices", resources: "Resources", gradebook: "Gradebook", chat: "Chat", reports: "Reports", profile: "Profile" };
 const SOON = {
   resources: ["Resources", "Upload and share files and courses with your students."],
   gradebook: ["Gradebook", "Grade your students and track their progress over time."],
   chat: ["Chat", "Message students and parents."],
-  reports: ["Reports", "Staff and student dashboards."],
 };
 function show(which) {
-  if (which === "invoices" && !isAdmin()) which = "home"; // money is for owners and admins
+  if ((which === "invoices" || which === "reports") && !isAdmin()) which = "home"; // money and reports are for owners and admins
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("on"));
   $(REAL[which] || "soonView").classList.add("on");
   if (!REAL[which]) { $("soonTitle").textContent = SOON[which][0]; $("soonText").textContent = SOON[which][1] + " Coming in a later phase."; }
@@ -327,6 +326,7 @@ function show(which) {
   if (which === "people") renderPeople();
   if (which === "profile") renderProfile();
   if (which === "invoices") renderInvoices();
+  if (which === "reports") renderReports();
 }
 document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => { if (b.dataset.go === "profile") profileId = null; show(b.dataset.go); }));
 
@@ -712,6 +712,113 @@ isForm.addEventListener("submit", async (e) => {
 });
 $("invSetCancel").onclick = () => isDlg.close();
 
+// ---------- reports ----------
+let rpTab = "staff", rpCsv = null;
+const RP = {
+  staff: ["Staff report", "A session counts as held once a student is marked present. Earned is the session price times the students present."],
+  students: ["Student report", "Attendance only counts sessions that have already happened."],
+  revenue: ["Revenue report", "Money invoiced and collected, month by month."],
+};
+function rpDates() {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth(), today = new Date(y, m, now.getDate());
+  const mon = addDays(today, -((today.getDay() + 6) % 7));
+  switch ($("rpRange").value) {
+    case "today": return [today, today];
+    case "week": return [mon, addDays(mon, 6)];
+    case "last30": return [addDays(today, -29), today];
+    case "lastmonth": return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+    case "year": return [new Date(y, 0, 1), today];
+    case "custom": { const a = $("rpFrom").value, b = $("rpTo").value; if (a && b && a <= b) return [parseYmd(a), parseYmd(b)]; }
+    // an unfinished custom range falls back to this month
+    default: return [new Date(y, m, 1), new Date(y, m + 1, 0)];
+  }
+}
+const ratePill = (r) => (r == null ? "–" : `<span class="pill ${r >= 80 ? "active" : r >= 50 ? "warn" : "bad"}">${r}%</span>`);
+const rpCard = (label, value) => `<div class="stat">${label}<b>${value}</b></div>`;
+
+function csvDownload(name, matrix) {
+  // a leading ' stops spreadsheets treating text like =SUM(...) as a formula
+  const q = (v) => { v = String(v ?? ""); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([matrix.map((r) => r.map(q).join(",")).join("\r\n")], { type: "text/csv" }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// sessions per day (or per week for long ranges): held on the bottom, the rest stacked above
+function stackedChart(series) {
+  let cols = series.map((s) => ({ label: String(parseYmd(s.k).getDate()), title: dShort(s.k), sched: s.sched, held: s.held }));
+  if (series.length > 31) {
+    const w = new Map();
+    for (const s of series) {
+      const k = ymd(mondayOf(parseYmd(s.k))), c = w.get(k) || { label: dShort(k).replace(/ \d{4}$/, ""), title: "Week of " + dShort(k), sched: 0, held: 0 };
+      c.sched += s.sched; c.held += s.held; w.set(k, c);
+    }
+    cols = [...w.values()];
+  }
+  const step = Math.ceil(cols.length / 14);
+  cols.forEach((c, i) => { if (i % step) c.label = ""; });
+  const max = Math.max(1, ...cols.map((c) => c.sched));
+  return `<div class="chart">${cols.map((c) => `<div class="col2" title="${esc(c.title)}: ${c.held} held, ${c.sched} scheduled"><div class="stack"><i class="s" style="height:${(100 * (c.sched - c.held)) / max}%"></i><i class="h" style="height:${(100 * c.held) / max}%"></i></div><span>${esc(c.label)}</span></div>`).join("")}</div>
+    <p class="hint legend"><b class="lg h"></b>Held <b class="lg s"></b>Scheduled, not held</p>`;
+}
+
+function staffView(from, to) {
+  const { rows, series } = staffReport(ymd(from), ymd(to));
+  const sum = (k) => rows.reduce((t, r) => t + r[k], 0), slots = sum("slots");
+  rows.sort((a, b) => b.hours - a.hours);
+  rpCsv = { name: `staff-report-${ymd(from)}-to-${ymd(to)}.csv`, rows: [["Staff", "Scheduled", "Held", "Hours taught", "Students", "Attendance %", "Earned"],
+    ...rows.map((r) => [staffName(r.staffId), r.scheduled, r.held, hrs(r.hours), r.students, r.rate ?? "", r.earned.toFixed(2)])] };
+  $("rpBody").innerHTML = `<div class="stats four">${rpCard("Sessions scheduled", sum("scheduled"))}${rpCard("Sessions held", sum("held"))}${rpCard("Hours taught", hrs(sum("hours")))}${rpCard("Attendance", slots ? ratePill(Math.round((100 * sum("present")) / slots)) : "–")}</div>
+    ${stackedChart(series)}
+    ${rows.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Staff</th><th>Scheduled</th><th>Held</th><th>Hours taught</th><th>Students</th><th>Attendance</th><th>Earned</th></tr></thead><tbody>${rows.map((r) =>
+      `<tr style="cursor:default"><td>${esc(staffName(r.staffId))}</td><td>${r.scheduled}</td><td>${r.held}</td><td>${hrs(r.hours)}</td><td>${r.students}</td><td>${ratePill(r.rate)}</td><td>${money(r.earned)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">No sessions in this period.</p>'}`;
+}
+
+function studentsView(from, to) {
+  const { rows, outstanding } = studentReport(ymd(from), ymd(to)), sort = $("rpSort").value;
+  rows.sort(sort === "rate" ? (a, b) => (a.rate ?? 101) - (b.rate ?? 101) : sort === "missed" ? (a, b) => b.missed - a.missed
+    : sort === "owes" ? (a, b) => b.owes - a.owes : (a, b) => a.name.localeCompare(b.name));
+  const past = rows.reduce((t, r) => t + r.past, 0), att = rows.reduce((t, r) => t + r.attended, 0);
+  const none = rows.filter((r) => r.past > 0 && r.attended === 0).length;
+  rpCsv = { name: `student-report-${ymd(from)}-to-${ymd(to)}.csv`, rows: [["Student", "Scheduled", "Attended", "Missed", "Attendance %", "Last attended", "Owes"],
+    ...rows.map((r) => [r.name, r.scheduled, r.attended, r.missed, r.rate ?? "", r.last ?? "", r.owes.toFixed(2)])] };
+  $("rpBody").innerHTML = `<div class="stats four">${rpCard("Students", rows.length)}${rpCard("Average attendance", past ? ratePill(Math.round((100 * att) / past)) : "–")}${rpCard("Not attended at all", none)}${rpCard("Outstanding", money(outstanding))}</div>
+    ${rows.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Student</th><th>Scheduled</th><th>Attended</th><th>Missed</th><th>Attendance</th><th>Last attended</th><th>Owes</th></tr></thead><tbody>${rows.map((r) =>
+      `<tr style="cursor:default"><td><button class="linkbtn" data-student="${r.id}">${esc(r.name)}</button></td><td>${r.scheduled}</td><td>${r.attended}</td><td>${r.missed}</td><td>${ratePill(r.rate)}</td><td>${r.last ? dShort(r.last) : "–"}</td><td>${r.owes ? money(r.owes) : "–"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="empty">No students yet.</p>'}`;
+}
+
+function revenueView() {
+  const { rows, age } = revenueReport(12), t = invoiceTotals();
+  const sumI = rows.reduce((a, r) => a + r.invoiced, 0), sumC = rows.reduce((a, r) => a + r.collected, 0);
+  const max = Math.max(1, ...rows.flatMap((r) => [r.invoiced, r.collected]));
+  rpCsv = { name: "revenue-report.csv", rows: [["Month", "Invoiced", "Collected"], ...rows.map((r) => [r.label, r.invoiced.toFixed(2), r.collected.toFixed(2)])] };
+  $("rpBody").innerHTML = `<div class="stats four">${rpCard("Invoiced, 12 months", money(sumI))}${rpCard("Collected, 12 months", money(sumC))}${rpCard("Outstanding now", money(t.outstanding))}${rpCard("Overdue now", money(t.overdue))}</div>
+    <div class="chart chart2">${rows.map((r) => `<div class="col2" title="${esc(r.label)}: invoiced ${money(r.invoiced)}, collected ${money(r.collected)}"><div class="stack"><i class="h" style="height:${(100 * r.invoiced) / max}%"></i><i class="s2" style="height:${(100 * r.collected) / max}%"></i></div><span>${esc(r.label)}</span></div>`).join("")}</div>
+    <p class="hint legend"><b class="lg h"></b>Invoiced <b class="lg s2"></b>Collected</p>
+    <h2 class="sect">Unpaid balances by how late they are</h2>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Not yet due</th><th>1–30 days late</th><th>31–60 days late</th><th>Over 60 days late</th></tr></thead><tbody><tr style="cursor:default"><td>${money(age.current)}</td><td>${money(age.d30)}</td><td>${money(age.d60)}</td><td>${money(age.older)}</td></tr></tbody></table></div>
+    <h2 class="sect">Month by month</h2>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Month</th><th>Invoiced</th><th>Collected</th></tr></thead><tbody>${[...rows].reverse().map((r) => `<tr style="cursor:default"><td>${esc(r.label)}</td><td>${money(r.invoiced)}</td><td>${money(r.collected)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderReports() {
+  document.querySelectorAll("[data-rp]").forEach((b) => b.classList.toggle("on", b.dataset.rp === rpTab));
+  const rev = rpTab === "revenue", custom = $("rpRange").value === "custom";
+  $("rpRange").hidden = rev; $("rpFrom").hidden = rev || !custom; $("rpTo").hidden = rev || !custom; $("rpSort").hidden = rpTab !== "students";
+  $("rpTitle").textContent = RP[rpTab][0];
+  const [from, to] = rpDates();
+  $("rpHint").textContent = (rev ? "" : `${dShort(ymd(from))} – ${dShort(ymd(to))}. `) + RP[rpTab][1];
+  ({ staff: staffView, students: studentsView, revenue: revenueView })[rpTab](from, to);
+}
+document.querySelectorAll("[data-rp]").forEach((b) => (b.onclick = () => { rpTab = b.dataset.rp; renderReports(); }));
+["rpRange", "rpFrom", "rpTo", "rpSort"].forEach((id) => ($(id).onchange = renderReports));
+$("rpCsv").onclick = () => rpCsv && csvDownload(rpCsv.name, rpCsv.rows);
+$("rpBody").addEventListener("click", (e) => {
+  const l = e.target.closest("[data-student]");
+  if (l) { studentOpenId = l.dataset.student; peopleTab = "students"; show("people"); }
+});
+{ const n = new Date(); $("rpFrom").value = ymd(new Date(n.getFullYear(), n.getMonth(), 1)); $("rpTo").value = ymd(n); }
+
 // ---------- workspace switcher, staff filter, header ----------
 let authUser = null;
 const savedOrg = () => { try { return localStorage.getItem("tutordesk.org"); } catch { return null; } };
@@ -728,6 +835,7 @@ function applyOrgUI() {
   $("orgSel").innerHTML = list.map((x) => `<option value="${x.id}">${esc(x.name)} (${x.type})</option>`).join("");
   $("orgSel").value = o.id;
   document.querySelector(".side [data-go=invoices]").hidden = !isAdmin();
+  document.querySelector(".side [data-go=reports]").hidden = !isAdmin();
 }
 $("staffSel").onchange = (e) => { staffFilter = e.target.value; renderWeek(); };
 $("orgSel").onchange = async (e) => {

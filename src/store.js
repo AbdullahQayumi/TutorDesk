@@ -528,3 +528,71 @@ export async function voidInvoice(id) {
   invoices.find((i) => i.id === id).status = "void";
   items.forEach((l) => { if (l.invoice_id === id) { l.session_id = null; l.occurrence = null; } });
 }
+
+// ---------- reports (owners and admins) ----------
+// Per staff member over a date range. "Held" = at least one student was marked present. "Earned" = session price x students present.
+export function staffReport(fromK, toK) {
+  const t = nowParts(), per = new Map(), series = [], d = parseYmd(fromK), end = parseYmd(toK);
+  for (let i = 0; d <= end && i < 400; i++, d.setDate(d.getDate() + 1)) {
+    let sched = 0, held = 0;
+    for (const o of sessionsOn(d)) {
+      const r = per.get(o.staffId) || { staffId: o.staffId, scheduled: 0, held: 0, hours: 0, studentIds: new Set(), slots: 0, present: 0, earned: 0 };
+      const h = hoursBetween(o.start, o.end);
+      r.scheduled++; sched++;
+      if (isPast(o, t)) { r.slots += o.total; r.present += o.presentCount; }
+      if (o.presentCount > 0) {
+        r.held++; held++; r.hours += h;
+        o.present.forEach((id) => r.studentIds.add(id));
+        if (o.price != null) r.earned += o.price * o.presentCount;
+      }
+      per.set(o.staffId, r);
+    }
+    series.push({ k: ymd(d), sched, held });
+  }
+  const rows = [...per.values()].map((r) => ({ ...r, students: r.studentIds.size, rate: r.slots ? Math.round((100 * r.present) / r.slots) : null, earned: r2(r.earned) }));
+  return { rows, series };
+}
+
+// Per student over a date range: attendance only counts sessions that have already happened.
+export function studentReport(fromK, toK) {
+  const t = nowParts(), d = parseYmd(fromK), end = parseYmd(toK);
+  const per = new Map(students.map((s) => [s.id, { id: s.id, name: s.name, status: s.status, scheduled: 0, past: 0, attended: 0, last: null }]));
+  for (let i = 0; d <= end && i < 400; i++, d.setDate(d.getDate() + 1)) {
+    for (const o of sessionsOn(d)) {
+      const past = isPast(o, t);
+      for (const sid of o.studentIds) {
+        const r = per.get(sid);
+        if (!r) continue;
+        r.scheduled++;
+        if (past) { r.past++; if (o.present.includes(sid)) { r.attended++; if (!r.last || o.occurrence > r.last) r.last = o.occurrence; } }
+      }
+    }
+  }
+  const owes = new Map();
+  for (const v of invoices.map(invoiceView)) {
+    if (v.state !== "void" && v.balance > 0 && v.student_id) owes.set(v.student_id, r2((owes.get(v.student_id) || 0) + v.balance));
+  }
+  const rows = [...per.values()].filter((r) => r.scheduled > 0 || r.status === "active")
+    .map((r) => ({ ...r, missed: r.past - r.attended, rate: r.past ? Math.round((100 * r.attended) / r.past) : null, owes: owes.get(r.id) || 0 }));
+  return { rows, outstanding: r2([...owes.values()].reduce((a, b) => a + b, 0)) };
+}
+
+// Invoiced vs collected per month (oldest first), and unpaid balances grouped by how late they are.
+export function revenueReport(months = 12) {
+  const now = new Date(), rows = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const m = new Date(now.getFullYear(), now.getMonth() - i, 1), key = ymd(m).slice(0, 7);
+    let invoiced = 0, collected = 0;
+    for (const v of invoices) if (v.status !== "void" && v.issue_date.startsWith(key)) invoiced += Number(v.total);
+    for (const p of payments) if (p.paid_on.startsWith(key)) collected += Number(p.amount);
+    rows.push({ label: m.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), invoiced: r2(invoiced), collected: r2(collected) });
+  }
+  const age = { current: 0, d30: 0, d60: 0, older: 0 }, today = new Date(); today.setHours(0, 0, 0, 0);
+  for (const v of invoices.map(invoiceView)) {
+    if (v.state === "void" || v.balance <= 0) continue;
+    const days = Math.floor((today - parseYmd(v.due_date)) / 864e5);
+    const k = days <= 0 ? "current" : days <= 30 ? "d30" : days <= 60 ? "d60" : "older";
+    age[k] = r2(age[k] + v.balance);
+  }
+  return { rows, age };
+}

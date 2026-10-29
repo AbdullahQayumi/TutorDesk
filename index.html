@@ -24,7 +24,7 @@
   <button data-go="resources" title="Resources"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span>Resources</span></button>
   <button data-go="gradebook" title="Gradebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5zM6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/></svg><span>Gradebook</span></button>
   <button data-go="chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 01-11.5 7.2L4 20.5l1.3-4.5A8 8 0 1121 12z"/></svg><span>Chat</span></button>
-  <button data-go="reports" title="Reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg><span>Reports</span></button>
+  <button data-go="reports" title="Reports" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/></svg><span>Reports</span></button>
   <button data-go="profile" title="Profile"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profile</span></button>
 </aside>
 
@@ -166,6 +166,27 @@
         <select id="invStudent" class="sel" aria-label="Filter by student"></select>
       </div>
       <div id="invTable" class="tblwrap"></div>
+    </div>
+  </section>
+
+  <section id="reportsView" class="view">
+    <nav class="subnav" aria-label="Reports">
+      <h2>Reports</h2>
+      <button class="on" data-rp="staff">Staff</button>
+      <button data-rp="students">Students</button>
+      <button data-rp="revenue">Revenue</button>
+    </nav>
+    <div class="pane">
+      <div class="phead">
+        <div><h1 id="rpTitle"></h1><p class="hint" id="rpHint"></p></div>
+        <div class="btns">
+          <select id="rpRange" class="sel" aria-label="Date range"><option value="today">Today</option><option value="week">This week</option><option value="month" selected>This month</option><option value="last30">Last 30 days</option><option value="lastmonth">Last month</option><option value="year">This year</option><option value="custom">Custom…</option></select>
+          <input type="date" id="rpFrom" hidden aria-label="From"><input type="date" id="rpTo" hidden aria-label="To">
+          <select id="rpSort" class="sel" hidden aria-label="Sort students"><option value="name">Sort by name</option><option value="rate">Lowest attendance first</option><option value="missed">Most missed first</option><option value="owes">Owes most first</option></select>
+          <button class="undo" id="rpCsv">Download CSV</button>
+        </div>
+      </div>
+      <div id="rpBody" style="margin-top:16px"></div>
     </div>
   </section>
 

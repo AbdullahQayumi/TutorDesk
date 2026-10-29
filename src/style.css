@@ -410,7 +410,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
 @media (max-width:760px){
   .stats.two{grid-template-columns:repeat(2,minmax(0,1fr))}
   .stats.two .stat{grid-column:span 1}
-  .side [data-go=resources],.side [data-go=gradebook],.side [data-go=chat],.side [data-go=reports]{display:none}
+  .side [data-go=resources],.side [data-go=gradebook],.side [data-go=chat]{display:none}
   #invNewForm input,#invNewForm select,#invNewForm textarea,#invSettingsForm select,#invSettingsForm textarea,.payform input,.payform select{font-size:16px}
 }
 
@@ -430,4 +430,28 @@ input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
   body.printing > :not(#printArea){display:none!important}
   body.printing #printArea{display:block;padding:8px}
   @page{margin:16mm}
+}
+
+/* ---- Reports ---- */
+#reportsView.on{flex-direction:row}
+.phead{flex-wrap:wrap}
+.btns{flex-wrap:wrap}
+.btns input[type=date]{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.pill.warn{background:#fef0c7;color:#93370d}
+.chart{display:flex;align-items:flex-end;gap:4px;height:170px;padding:16px;margin:0 0 6px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.chart .col2{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px}
+.chart .stack{width:100%;max-width:30px;flex:1;display:flex;flex-direction:column;justify-content:flex-end}
+.chart .stack i{display:block;width:100%}
+.chart .stack .h{background:var(--blue);border-radius:3px 3px 0 0}
+.chart .stack .s{background:var(--blue-soft)}
+.chart .col2 span{font-size:10px;color:var(--mute);white-space:nowrap;height:12px}
+.chart2 .stack{flex-direction:row;align-items:flex-end;gap:2px;max-width:40px}
+.chart2 .stack i{width:50%}
+.chart .stack .s2{background:#f59e0b;border-radius:3px 3px 0 0}
+.legend{margin:6px 0 20px;display:flex;align-items:center;gap:6px}
+.lg{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}
+.lg.h{background:var(--blue)} .lg.s{background:var(--blue-soft)} .lg.s2{background:#f59e0b}
+@media (max-width:760px){
+  #reportsView.on{flex-direction:column}
+  .chart{height:140px;padding:12px 8px}
 }
