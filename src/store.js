@@ -17,6 +17,7 @@ let orgs = [], members = [], invites = [];
 let settings = {}, leaves = []; // settings: userId -> { workingHours, takesClasses }
 let batches = [], batchLinks = [], guardians = [], guardianLinks = [];
 let invoices = [], items = [], payments = []; // money: owners and admins only
+let resources = []; // uploaded files
 
 const fail = (error) => { if (error) throw new Error(error.message); };
 const studentName = (id) => students.find((x) => x.id === id)?.name;
@@ -50,7 +51,7 @@ export async function loadAll(userId, preferredOrg) {
   org = orgs.find((o) => o.id === preferredOrg) || orgs[0];
   myRole = org.role;
   const q = (t, cols = "*") => supabase.from(t).select(cols).eq("org_id", org.id);
-  const [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm] = await Promise.all([
+  const [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm, rs] = await Promise.all([
     q("sessions"),
     q("attendance", "session_id, student_id, occurrence, marked_at").order("marked_at", { ascending: false }),
     q("students"),
@@ -66,8 +67,9 @@ export async function loadAll(userId, preferredOrg) {
     isAdmin() ? q("invoices") : { data: [], error: null },
     isAdmin() ? q("invoice_items") : { data: [], error: null },
     isAdmin() ? q("payments") : { data: [], error: null },
+    q("resources"),
   ]);
-  for (const r of [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm]) fail(r.error);
+  for (const r of [a, b, c, d, e, f, g, bt, bl, gd, gl, ss, iv, it, pm, rs]) fail(r.error);
   members = d.data.map((m) => ({ userId: m.user_id, role: m.role, email: m.profiles?.email || "", phone: m.profiles?.phone || "",
     name: m.profiles?.full_name || m.profiles?.email || "Unnamed" }));
   invites = e.data;
@@ -79,13 +81,13 @@ export async function loadAll(userId, preferredOrg) {
   for (const l of ss.data) { if (!roster.has(l.session_id)) roster.set(l.session_id, []); roster.get(l.session_id).push(l.student_id); }
   sessions = a.data.map((r) => ({ ...fromRow(r), studentIds: roster.get(r.id) || [] }));
   attendance = b.data;
-  invoices = iv.data; items = it.data; payments = pm.data;
+  invoices = iv.data; items = it.data; payments = pm.data; resources = rs.data;
   reindexAtt();
 }
 export function clearAll() {
   sessions = []; attendance = []; attIdx = new Map(); students = []; org = null; orgs = []; members = []; invites = [];
   settings = {}; leaves = []; batches = []; batchLinks = []; guardians = []; guardianLinks = [];
-  invoices = []; items = []; payments = [];
+  invoices = []; items = []; payments = []; resources = [];
 }
 
 export async function getProfile(userId) {
@@ -258,6 +260,7 @@ export async function deleteStudent(id) {
   attendance = attendance.filter((a) => a.student_id !== id); reindexAtt();
   batchLinks = batchLinks.filter((l) => l.student_id !== id);
   guardianLinks = guardianLinks.filter((l) => l.student_id !== id);
+  resources.forEach((r) => { if (r.student_id === id) r.student_id = null; });
 }
 
 // ---------- workspace / team ----------
@@ -595,4 +598,59 @@ export function revenueReport(months = 12) {
     age[k] = r2(age[k] + v.balance);
   }
   return { rows, age };
+}
+
+// ---------- resources (files) ----------
+export const RES_MAX = 20 * 1024 * 1024; // 20 MB; the storage bucket enforces this too
+const RES_EXT = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain", csv: "text/csv", mp3: "audio/mpeg", mp4: "video/mp4" };
+export const RES_ACCEPT = Object.keys(RES_EXT).map((e) => "." + e).join(",");
+// the file's type comes from its ending, never from the browser's guess
+const mimeOf = (f) => RES_EXT[f.name.split(".").pop().toLowerCase()] || null;
+
+export const listResources = () => [...resources];
+export const studentResources = (studentId) => resources.filter((r) => r.student_id === studentId).sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+export async function uploadResource(file, { studentId, tags = [] } = {}) {
+  const mime = mimeOf(file);
+  if (!mime) throw new Error("this file type isn't allowed");
+  if (!file.size) throw new Error("the file is empty");
+  if (file.size > RES_MAX) throw new Error("over the 20 MB limit");
+  const path = `${org.id}/${crypto.randomUUID()}-${file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80)}`;
+  const up = await supabase.storage.from("resources").upload(path, file, { contentType: mime });
+  fail(up.error);
+  const { data, error } = await supabase.from("resources")
+    .insert({ org_id: org.id, student_id: studentId || null, name: file.name.slice(0, 200), path, size: file.size, mime, tags }).select().single();
+  if (error) { await supabase.storage.from("resources").remove([path]); throw new Error(error.message); } // don't leave a file with no record
+  resources.unshift(data);
+  return data;
+}
+export async function updateResource(id, { name, tags, studentId }) {
+  const { data, error } = await supabase.from("resources").update({ name, tags, student_id: studentId || null }).eq("id", id).select().single();
+  fail(error);
+  Object.assign(resources.find((r) => r.id === id), data);
+}
+export async function deleteResource(id) {
+  const r = resources.find((x) => x.id === id);
+  if (!r) return;
+  const rm = await supabase.storage.from("resources").remove([r.path]);
+  fail(rm.error);
+  const { error } = await supabase.from("resources").delete().eq("id", id);
+  fail(error);
+  resources = resources.filter((x) => x.id !== id);
+}
+// temporary links: the bucket is private, so every view or share goes through a signed link that expires
+export async function resourceUrls(paths, seconds = 3600) {
+  if (!paths.length) return {};
+  const { data, error } = await supabase.storage.from("resources").createSignedUrls(paths, seconds);
+  fail(error);
+  return Object.fromEntries(data.filter((x) => x.signedUrl).map((x) => [x.path, x.signedUrl]));
+}
+export async function resourceLink(path, seconds = 120) {
+  const { data, error } = await supabase.storage.from("resources").createSignedUrl(path, seconds);
+  fail(error);
+  return data.signedUrl;
 }

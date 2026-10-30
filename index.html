@@ -190,6 +190,22 @@
     </div>
   </section>
 
+  <section id="resourcesView" class="view">
+    <div class="pane" id="resPane">
+      <div class="phead">
+        <div><h1>Files</h1><p class="hint">Worksheets, past papers and other files. Copy a link to share a file (the link works for 7 days for anyone who has it), or attach files to a student. You can also drop files anywhere on this page.</p></div>
+        <button class="add" id="resNewBtn">Upload files</button>
+      </div>
+      <div class="toolbar">
+        <input id="resSearch" type="search" placeholder="Search files" aria-label="Search files">
+        <select id="resTag" class="sel" aria-label="Filter by tag"></select>
+        <select id="resStudent" class="sel" aria-label="Filter by student"></select>
+        <select id="resSort" class="sel" aria-label="Sort files"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="name">Name A to Z</option><option value="big">Largest first</option></select>
+      </div>
+      <div id="resGrid" class="fgrid"></div>
+    </div>
+  </section>
+
   <section id="soonView" class="view"><div class="soon"><h1 id="soonTitle"></h1><p id="soonText"></p></div></section>
 </div>
 
@@ -238,6 +254,29 @@
       <button type="button" id="stCancel">Cancel</button>
       <button type="submit" class="add">Save student</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="resUpDialog" aria-labelledby="ruTitle">
+  <form id="resUpForm">
+    <h2 id="ruTitle">Upload files</h2>
+    <label class="drop"><b>Choose files</b><span id="resPicked">PDF, images, Word, Excel, PowerPoint, text, CSV, MP3 or MP4, up to 20 MB each</span><input type="file" id="resFile" multiple hidden></label>
+    <label>Attach to a student (optional) <select id="resUpStudent"></select></label>
+    <label>Tags (optional, separated by commas) <input id="resUpTags" maxlength="200" placeholder="e.g. worksheet, maths"></label>
+    <p id="resUpErr" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="resUpCancel">Cancel</button><button type="submit" class="add" id="resUpGo">Upload</button></div>
+  </form>
+</dialog>
+
+<dialog id="resDialog" aria-labelledby="reTitle">
+  <form id="resForm">
+    <h2 id="reTitle">File details</h2>
+    <input type="hidden" name="id">
+    <label>Name <input name="name" required maxlength="200"></label>
+    <label>Tags (separated by commas) <input name="tags" maxlength="200"></label>
+    <label>Attached to <select name="student" id="resEditStudent"></select></label>
+    <p id="resEditErr" class="err" role="alert"></p>
+    <div class="actions"><button type="button" id="resDelete" class="danger">Delete</button><button type="button" id="resCancel">Close</button><button type="submit" class="add" id="resSave">Save</button></div>
   </form>
 </dialog>
 

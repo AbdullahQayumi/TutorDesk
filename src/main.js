@@ -1,5 +1,5 @@
 import "./style.css";
-import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, invoiceTotals, listInvoices, getInvoice, billableLines, createInvoice, addPayment, deletePayment, voidInvoice, saveBilling, money, studentInvoices, staffReport, studentReport, revenueReport, loadAll, clearAll, getProfile } from "./store.js";
+import { ymd, parseYmd, sessionsOn, getSession, saveSession, deleteSession, markAttendance, unmarkAttendance, recentOccurrences, getTimeline, stats, monthStats, listStudents, getStudent, saveStudent, deleteStudent, getOrg, getOrgs, getMe, isAdmin, canEditSession, getMembers, getInvites, staffName, inviteMember, revokeInvite, setRole, removeMember, convertToBusiness, takesClasses, getHours, saveSettings, getLeaves, onLeave, addLeave, deleteLeave, timesheet, saveProfile, listBatches, getBatch, batchStudentIds, studentBatches, saveBatch, deleteBatch, listGuardians, getGuardian, guardianStudentIds, studentGuardians, saveGuardian, deleteGuardian, studentHistory, markAllAttendance, studentLabel, todayOccurrences, invoiceTotals, listInvoices, getInvoice, billableLines, createInvoice, addPayment, deletePayment, voidInvoice, saveBilling, money, studentInvoices, staffReport, studentReport, revenueReport, listResources, studentResources, uploadResource, updateResource, deleteResource, resourceUrls, resourceLink, RES_ACCEPT, loadAll, clearAll, getProfile } from "./store.js";
 import * as auth from "./auth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -308,10 +308,9 @@ occDlg.addEventListener("click", (e) => { if (e.target === occDlg) occDlg.close(
 
 // ---------- navigation ----------
 const SECTIONS = ["home", "cal", "people", "invoices", "resources", "gradebook", "chat", "reports", "profile"];
-const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView", invoices: "invoicesView", reports: "reportsView" };
+const REAL = { cal: "calView", home: "homeView", people: "peopleView", profile: "profileView", invoices: "invoicesView", reports: "reportsView", resources: "resourcesView" };
 const TITLES = { home: "Home", cal: "Calendar", people: "People", invoices: "Invoices", resources: "Resources", gradebook: "Gradebook", chat: "Chat", reports: "Reports", profile: "Profile" };
 const SOON = {
-  resources: ["Resources", "Upload and share files and courses with your students."],
   gradebook: ["Gradebook", "Grade your students and track their progress over time."],
   chat: ["Chat", "Message students and parents."],
 };
@@ -327,6 +326,7 @@ function show(which) {
   if (which === "profile") renderProfile();
   if (which === "invoices") renderInvoices();
   if (which === "reports") renderReports();
+  if (which === "resources") renderResources();
 }
 document.querySelectorAll(".side [data-go]").forEach((b) => (b.onclick = () => { if (b.dataset.go === "profile") profileId = null; show(b.dataset.go); }));
 
@@ -425,7 +425,7 @@ function renderStudentPage() {
     <h2 class="sect">Guardians <button class="undo" id="spAddGuardian">Add guardian</button></h2>
     ${gs.length ? `<div class="card">${gs.map((g) => `<div class="row"><div>${esc(g.name)}${g.relationship ? ` (${esc(g.relationship)})` : ""}<br><span>${[g.email, g.phone].filter(Boolean).map(esc).join(" · ") || "No contact details"}</span></div></div>`).join("")}</div>` : '<p class="hint">No guardians linked yet.</p>'}
     <h2 class="sect">Batches</h2>${bs.length ? bs.map((b) => `<span class="pill2">${esc(b.name)}</span>`).join("") : '<p class="hint">Not in any batch.</p>'}
-    ${invSection(s)}<h2 class="sect">Upcoming sessions</h2>${upcoming.length ? `<div class="card">${upcoming.slice(0, 5).map((r) => `<div class="row"><div>${esc(r.title)}<br><span>${fmtD(r.date)} · ${fmtT(r.start)} - ${fmtT(r.end)}${staffTxt(r)}</span></div></div>`).join("")}</div>` : '<p class="hint">Nothing scheduled in the next four weeks.</p>'}
+    ${invSection(s)}${resSection(s)}<h2 class="sect">Upcoming sessions</h2>${upcoming.length ? `<div class="card">${upcoming.slice(0, 5).map((r) => `<div class="row"><div>${esc(r.title)}<br><span>${fmtD(r.date)} · ${fmtT(r.start)} - ${fmtT(r.end)}${staffTxt(r)}</span></div></div>`).join("")}</div>` : '<p class="hint">Nothing scheduled in the next four weeks.</p>'}
     <h2 class="sect">Attendance history</h2>${past.length ? `<div class="tblwrap"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Class</th>${biz ? "<th>Staff</th>" : ""}<th>Attendance</th></tr></thead><tbody>${past.slice(0, 100).map((r) => `<tr style="cursor:default"><td>${fmtD(r.date)}</td><td>${fmtT(r.start)} - ${fmtT(r.end)}</td><td>${esc(r.title)}</td>${biz ? `<td>${esc(staffName(r.staffId))}</td>` : ""}<td><span class="pill ${r.marked ? "active" : "inactive"}">${r.marked ? "Marked" : "Not marked"}</span></td></tr>`).join("")}</tbody></table></div>` : '<p class="hint">No past sessions yet.</p>'}`;
 }
 $("studentPage").addEventListener("click", (e) => {
@@ -433,6 +433,7 @@ $("studentPage").addEventListener("click", (e) => {
   else if (e.target.closest("#spEdit")) openStudent(studentOpenId);
   else if (e.target.closest("#spAddGuardian")) openGuardian(null, studentOpenId);
   else if (e.target.closest("#spNewInv")) openNewInvoice(studentOpenId);
+  else if (e.target.closest("#spUpload")) openUpload(studentOpenId);
   else if (e.target.closest("[data-inv]")) openInvoice(e.target.closest("[data-inv]").dataset.inv);
 });
 
@@ -818,6 +819,146 @@ $("rpBody").addEventListener("click", (e) => {
   if (l) { studentOpenId = l.dataset.student; peopleTab = "students"; show("people"); }
 });
 { const n = new Date(); $("rpFrom").value = ymd(new Date(n.getFullYear(), n.getMonth(), 1)); $("rpTo").value = ymd(n); }
+
+// ---------- resources (files) ----------
+const fmtSize = (b) => (b < 1024 ? b + " B" : b < 1048576 ? Math.round(b / 1024) + " KB" : (b / 1048576).toFixed(1) + " MB");
+const kindOf = (m = "") => (m.startsWith("image/") ? "img" : m.includes("pdf") ? "pdf" : m.includes("word") ? "doc" : /sheet|excel|csv/.test(m) ? "xls"
+  : /presentation|powerpoint/.test(m) ? "ppt" : /^(audio|video)\//.test(m) ? "av" : "other");
+const parseTags = (txt) => { // keeps the first spelling of each tag, ignoring repeats like "Maths, maths"
+  const seen = new Map();
+  for (const t of txt.split(",").map((x) => x.trim().slice(0, 30))) if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+  return [...seen.values()].slice(0, 10);
+};
+const findRes = (id) => listResources().find((r) => r.id === id);
+const canManageRes = (r) => isAdmin() || r.uploaded_by === getMe().id;
+let resUrls = {}, resRender = 0; // resUrls: file path -> temporary picture link for thumbnails
+
+const resCard = (r) => {
+  const kind = kindOf(r.mime), stu = r.student_id ? getStudent(r.student_id)?.name : "";
+  const thumb = kind === "img" && resUrls[r.path] ? `<img src="${esc(resUrls[r.path])}" alt="" loading="lazy">` : `<span>${esc((r.name.split(".").pop() || "file").toUpperCase().slice(0, 4))}</span>`;
+  return `<div class="fcard"><div class="thumb ft-${kind}"${kind === "img" ? ` data-path="${esc(r.path)}"` : ""}>${thumb}</div>
+    <div class="fmeta"><b title="${esc(r.name)}">${esc(r.name)}</b><span>${fmtSize(r.size)} · ${dShort(r.created_at.slice(0, 10))}${stu ? " · " + esc(stu) : ""}</span>${r.tags.length ? `<span>${r.tags.map((t) => `<span class="pill2">${esc(t)}</span>`).join("")}</span>` : ""}</div>
+    <div class="fact"><button class="undo" data-ropen="${r.id}">Open</button><button class="undo" data-rlink="${r.id}">Copy link</button><button class="undo" data-redit="${r.id}">${canManageRes(r) ? "Edit" : "Details"}</button></div></div>`;
+};
+
+async function renderResources() {
+  const all = listResources(), q = $("resSearch").value.trim().toLowerCase();
+  const keepTag = $("resTag").value || "all", keepStu = $("resStudent").value || "all";
+  $("resTag").innerHTML = '<option value="all">All tags</option>' + [...new Set(all.flatMap((r) => r.tags))].sort((a, b) => a.localeCompare(b)).map((t) => `<option>${esc(t)}</option>`).join("");
+  $("resTag").value = keepTag;
+  $("resStudent").innerHTML = '<option value="all">All students</option>' + listStudents().map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  $("resStudent").value = keepStu;
+  const tag = $("resTag").value || "all", sf = $("resStudent").value || "all", sort = $("resSort").value;
+  const rows = all.filter((r) => (tag === "all" || r.tags.includes(tag)) && (sf === "all" || r.student_id === sf) && (!q || `${r.name} ${r.tags.join(" ")}`.toLowerCase().includes(q)));
+  rows.sort(sort === "old" ? (a, b) => a.created_at.localeCompare(b.created_at) : sort === "name" ? (a, b) => a.name.localeCompare(b.name)
+    : sort === "big" ? (a, b) => b.size - a.size : (a, b) => b.created_at.localeCompare(a.created_at));
+  const mine = ++resRender;
+  $("resGrid").innerHTML = rows.length ? rows.map(resCard).join("") : `<p class="empty">${all.length ? "No files match." : "No files yet. Upload worksheets, past papers or anything you want to share."}</p>`;
+  const need = rows.filter((r) => kindOf(r.mime) === "img" && !resUrls[r.path]).map((r) => r.path);
+  if (need.length) { try { Object.assign(resUrls, await resourceUrls(need, 3600)); } catch { return; } }
+  if (mine !== resRender) return; // a newer draw replaced this one
+  $("resGrid").querySelectorAll(".thumb[data-path]").forEach((t) => { const u = resUrls[t.dataset.path]; if (u && !t.querySelector("img")) t.innerHTML = `<img src="${esc(u)}" alt="" loading="lazy">`; });
+}
+["resSearch", "resTag", "resStudent", "resSort"].forEach((id) => ($(id).oninput = renderResources));
+
+// shown on a student's page
+const resSection = (st) => {
+  const list = studentResources(st.id);
+  return `<h2 class="sect">Files <button class="undo" id="spUpload">Upload</button></h2>` + (list.length
+    ? `<div class="card">${list.map((r) => `<div class="row"><div>${esc(r.name)}<br><span>${fmtSize(r.size)} · ${dShort(r.created_at.slice(0, 10))}</span></div><button class="undo" data-ropen="${r.id}">Open</button></div>`).join("")}</div>`
+    : '<p class="hint">No files attached yet.</p>');
+};
+
+// Open / Copy link / Edit, from the grid and from a student's page
+const resAction = async (e) => {
+  const o = e.target.closest("[data-ropen]"), l = e.target.closest("[data-rlink]"), ed = e.target.closest("[data-redit]");
+  if (!o && !l && !ed) return;
+  try {
+    if (o) {
+      const w = window.open("about:blank", "_blank"); // opened first so pop-up blockers allow it
+      try { const url = await resourceLink(findRes(o.dataset.ropen).path, 120); if (w) { w.opener = null; w.location.href = url; } else alert("Allow pop-ups to open files."); }
+      catch (err) { if (w) w.close(); throw err; }
+    } else if (l) {
+      const url = await resourceLink(findRes(l.dataset.rlink).path, 7 * 86400);
+      try { await navigator.clipboard.writeText(url); const t = l.textContent; l.textContent = "Copied!"; setTimeout(() => { l.textContent = t; }, 1500); }
+      catch { prompt("Copy this link (it works for 7 days):", url); }
+    } else openResEdit(ed.dataset.redit);
+  } catch (err) { alert(err.message); }
+};
+$("resGrid").addEventListener("click", resAction);
+$("studentPage").addEventListener("click", resAction);
+
+// edit / delete
+const rDlg = $("resDialog"), rForm = $("resForm");
+function openResEdit(id) {
+  const r = findRes(id), can = canManageRes(r);
+  rForm.reset();
+  rForm.elements.id.value = id; rForm.elements.name.value = r.name; rForm.elements.tags.value = r.tags.join(", ");
+  $("resEditStudent").innerHTML = '<option value="">Not attached to a student</option>' + listStudents().map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  rForm.elements.student.value = r.student_id || "";
+  rForm.querySelectorAll("input:not([type=hidden]),select").forEach((i) => { i.disabled = !can; });
+  $("resSave").hidden = !can; $("resDelete").hidden = !can;
+  $("resEditErr").textContent = can ? "" : "Only the person who uploaded this file, or an admin, can change it.";
+  rDlg.showModal();
+}
+rForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = rForm.elements;
+  try { await updateResource(f.id.value, { name: f.name.value.trim(), tags: parseTags(f.tags.value), studentId: f.student.value }); }
+  catch (err) { $("resEditErr").textContent = err.message; return; }
+  rDlg.close(); renderResources(); if (studentOpenId) renderPeople();
+});
+$("resDelete").onclick = async () => {
+  if (!confirm("Delete this file? Any links you shared will stop working.")) return;
+  try { await deleteResource(rForm.elements.id.value); } catch (err) { $("resEditErr").textContent = err.message; return; }
+  rDlg.close(); renderResources(); if (studentOpenId) renderPeople();
+};
+$("resCancel").onclick = () => rDlg.close();
+rDlg.addEventListener("click", (e) => { if (e.target === rDlg) rDlg.close(); });
+
+// upload
+const ruDlg = $("resUpDialog"), ruForm = $("resUpForm");
+$("resFile").accept = RES_ACCEPT;
+function openUpload(studentId, keepFiles) {
+  if (!keepFiles) ruForm.reset();
+  $("resUpStudent").innerHTML = '<option value="">No student</option>' + listStudents().map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("");
+  $("resUpStudent").value = studentId || "";
+  $("resUpErr").textContent = ""; $("resUpErr").className = "err";
+  showPicked();
+  ruDlg.showModal();
+}
+function showPicked() {
+  const f = [...$("resFile").files];
+  $("resPicked").textContent = f.length ? f.map((x) => x.name).join(", ") : "PDF, images, Word, Excel, PowerPoint, text, CSV, MP3 or MP4, up to 20 MB each";
+}
+$("resFile").onchange = showPicked;
+$("resNewBtn").onclick = () => openUpload();
+ruForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const files = [...$("resFile").files], err = $("resUpErr");
+  if (!files.length) { err.className = "err"; err.textContent = "Choose at least one file."; return; }
+  const tags = parseTags($("resUpTags").value), studentId = $("resUpStudent").value || null, failed = [];
+  $("resUpGo").disabled = true;
+  for (const [i, f] of files.entries()) {
+    err.className = "hint"; err.textContent = `Uploading ${i + 1} of ${files.length}: ${f.name}…`;
+    try { await uploadResource(f, { studentId, tags }); } catch (x) { failed.push(`${f.name}: ${x.message}`); }
+  }
+  $("resUpGo").disabled = false;
+  renderResources(); if (studentOpenId) renderPeople();
+  if (failed.length) { err.className = "err"; err.textContent = failed.join(" · "); } else ruDlg.close();
+});
+$("resUpCancel").onclick = () => ruDlg.close();
+ruDlg.addEventListener("click", (e) => { if (e.target === ruDlg) ruDlg.close(); });
+// drop files anywhere on the Files page
+const resPane = $("resPane");
+resPane.addEventListener("dragover", (e) => { e.preventDefault(); resPane.classList.add("dragging"); });
+resPane.addEventListener("dragleave", (e) => { if (e.target === resPane) resPane.classList.remove("dragging"); });
+resPane.addEventListener("drop", (e) => {
+  e.preventDefault(); resPane.classList.remove("dragging");
+  if (!e.dataTransfer?.files?.length) return;
+  $("resFile").files = e.dataTransfer.files;
+  openUpload(null, true);
+});
 
 // ---------- workspace switcher, staff filter, header ----------
 let authUser = null;
